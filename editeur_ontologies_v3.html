@@ -1,0 +1,1757 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Éditeur d'instanciation ontologique</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300&family=Syne:wght@400;600;700;800&display=swap');
+
+  :root {
+    --bg: #f4f6fa;
+    --surface: #ffffff;
+    --panel: #ffffff;
+    --border: #d0d5e0;
+    --border-light: #b8c0d0;
+    --text: #1a1f2e;
+    --muted: #7a849a;
+    --accent: #534AB7;
+    --accent2: #7c5cf0;
+    --good: #4caf81;
+    --warn: #f5c842;
+    --bad: #ff6b6b;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    font-family:'DM Mono', monospace;
+    background:var(--bg); color:var(--text);
+    height:100vh; display:flex; flex-direction:column; overflow:hidden;
+  }
+  button, input, textarea, select { font-family:'DM Mono', monospace; }
+  button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible{
+    outline:2px solid var(--accent); outline-offset:1px;
+  }
+
+  /* HEADER */
+  header{ height:52px; background:var(--surface); border-bottom:1px solid var(--border);
+    display:flex; align-items:center; padding:0 16px; gap:14px; flex-shrink:0; z-index:100; }
+  .brand{ font-family:'Syne',sans-serif; font-weight:800; font-size:14px; letter-spacing:-0.01em; }
+  .brand span{ font-weight:600; color:var(--muted); font-size:10px; letter-spacing:0.14em;
+    text-transform:uppercase; margin-left:6px; }
+  .header-sep{ width:1px; height:22px; background:var(--border); }
+  .header-info{ font-size:11px; color:var(--muted); }
+  .header-actions{ margin-left:auto; display:flex; gap:8px; }
+  .btn{ font-size:11px; padding:6px 12px; border-radius:6px; border:1px solid var(--border);
+    background:var(--panel); color:var(--text); cursor:pointer; transition:all .15s; }
+  .btn:hover{ border-color:var(--accent); color:var(--accent); }
+  .btn-primary{ background:var(--accent); color:#fff; border-color:var(--accent); }
+  .btn-primary:hover{ background:#4a3fa6; color:#fff; }
+  .btn:disabled{ opacity:0.4; cursor:not-allowed; }
+  .btn:disabled:hover{ border-color:var(--border); color:var(--text); }
+
+  /* WORKSPACE */
+  .workspace{ flex:1; display:flex; overflow:hidden; }
+
+  /* SIDEBAR */
+  .sidebar{ width:280px; flex-shrink:0; background:var(--surface); border-right:1px solid var(--border);
+    display:flex; flex-direction:column; overflow:hidden; }
+  .sidebar-block{ padding:14px 16px; border-bottom:1px solid var(--border); flex-shrink:0; }
+  .sidebar-title{ font-family:'Syne',sans-serif; font-size:10px; font-weight:700; letter-spacing:0.16em;
+    text-transform:uppercase; color:var(--muted); margin-bottom:10px; }
+  textarea.onto-input{ width:100%; min-height:90px; background:var(--bg); border:1px solid var(--border);
+    border-radius:6px; padding:8px; font-size:10.5px; color:var(--text); resize:vertical; }
+  .row{ display:flex; gap:6px; margin-top:8px; flex-wrap:wrap; }
+  .row .btn{ flex:1; white-space:nowrap; }
+  .stat{ font-size:10.5px; color:var(--text); background:#EEEDFE; border-radius:6px; padding:8px 9px;
+    margin-top:9px; line-height:1.5; }
+  .stat b{ color:var(--accent); }
+  .warn-box{ font-size:10.5px; color:#6b5000; background:#FAEEDA; padding:7px 9px; border-radius:6px; margin-top:7px; }
+  .search-box{ width:100%; background:var(--bg); border:1px solid var(--border); border-radius:6px;
+    padding:7px 10px; font-size:11px; color:var(--text); outline:none; margin-top:8px; }
+  .search-box::placeholder{ color:var(--muted); }
+
+  .entity-list{ flex:1; overflow-y:auto; padding:8px 0; }
+  .entity-list::-webkit-scrollbar{ width:4px; }
+  .entity-list::-webkit-scrollbar-thumb{ background:var(--border); border-radius:2px; }
+  .entity-group-label{ padding:8px 16px 4px; font-size:9px; font-weight:700; letter-spacing:0.16em;
+    text-transform:uppercase; color:var(--muted); font-family:'Syne',sans-serif; }
+  .entity-item{ display:flex; align-items:center; gap:9px; padding:7px 16px; cursor:grab; user-select:none; }
+  .entity-item:hover{ background:var(--bg); }
+  .entity-item:active{ cursor:grabbing; }
+  .entity-dot{ width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+  .entity-item-content{ flex:1; min-width:0; }
+  .entity-item-name{ font-size:11px; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .entity-item-sub{ font-size:9px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .empty-list{ padding:16px; font-size:11px; color:var(--muted); line-height:1.6; }
+
+  /* CANVAS */
+  .canvas-area{ flex:1; position:relative; overflow:scroll; }
+  .canvas-area::-webkit-scrollbar{ width:10px; height:10px; }
+  .canvas-area::-webkit-scrollbar-track{ background:var(--bg); }
+  .canvas-area::-webkit-scrollbar-thumb{ background:var(--border); border-radius:5px; border:2px solid var(--bg); }
+  .canvas-inner{ position:relative; width:2600px; height:1600px; }
+  .canvas-bg{ position:absolute; inset:0; }
+  .canvas-bg::before{ content:''; position:absolute; inset:0;
+    background-image:radial-gradient(circle, var(--border) 1px, transparent 1px);
+    background-size:22px 22px; opacity:0.7; }
+  #edges-svg{ position:absolute; inset:0; width:100%; height:100%; pointer-events:none; z-index:5; overflow:visible; }
+  .edge-path{ fill:none; stroke:var(--border-light); stroke-width:1.6; pointer-events:stroke; cursor:pointer; }
+  .edge-path:hover{ stroke:var(--accent); }
+  .edge-label-bg{ fill:var(--bg); }
+  .edge-label-text{ font-size:9px; fill:var(--muted); text-anchor:middle; font-family:'DM Mono',monospace; }
+  .temp-edge{ stroke:var(--warn); stroke-dasharray:5 3; stroke-width:1.6; }
+
+  .drop-hint{ position:absolute; inset:0; display:flex; flex-direction:column; align-items:center;
+    justify-content:center; pointer-events:none; gap:10px; }
+  .drop-hint.hidden{ display:none; }
+  .drop-hint-icon{ font-size:32px; opacity:0.15; }
+  .drop-hint-text{ font-family:'Syne',sans-serif; font-size:13px; font-weight:700; color:var(--muted); letter-spacing:0.06em; }
+  .drop-hint-sub{ font-size:11px; color:var(--muted); opacity:0.7; }
+
+  .canvas-node{ position:absolute; min-width:180px; max-width:260px; border-radius:10px;
+    border:1px solid var(--border); background:var(--panel); box-shadow:0 2px 8px rgba(0,0,0,0.08);
+    cursor:move; user-select:none; z-index:10; }
+  .canvas-node:hover{ box-shadow:0 0 0 1px var(--accent), 0 8px 24px rgba(83,74,183,0.15); z-index:20; }
+  .canvas-node.selected{ box-shadow:0 0 0 2px var(--accent), 0 12px 32px rgba(83,74,183,0.18); z-index:30; }
+  .canvas-node.linking-source{ box-shadow:0 0 0 2px var(--warn), 0 12px 40px rgba(245,200,66,0.35); }
+  .canvas-node.link-target{ box-shadow:0 0 0 2px var(--good), 0 8px 32px rgba(76,175,129,0.3); }
+  .node-header{ padding:9px 10px 7px; border-radius:10px 10px 0 0; display:flex; align-items:flex-start; gap:8px; cursor:move; }
+  .node-color-bar{ width:3px; min-height:30px; border-radius:2px; flex-shrink:0; align-self:stretch; }
+  .node-header-text{ flex:1; min-width:0; }
+  .node-class{ font-size:9px; color:var(--muted); margin-bottom:3px; letter-spacing:0.03em;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .node-name-input{ font-family:'Syne',sans-serif; font-size:12px; font-weight:700; color:var(--text);
+    border:none; background:transparent; width:100%; padding:0; }
+  .node-name-input:focus{ outline:none; border-bottom:1px solid var(--accent); }
+  .node-actions{ display:flex; gap:3px; margin-left:auto; flex-shrink:0; }
+  .node-btn{ width:20px; height:20px; border-radius:4px; border:1px solid var(--border); background:transparent;
+    color:var(--muted); font-size:10px; cursor:pointer; display:flex; align-items:center; justify-content:center; }
+  .node-btn:hover{ background:var(--bg); color:var(--text); }
+  .node-btn.link-btn:hover{ border-color:var(--warn); color:#8a6d00; }
+  .node-btn.del-btn:hover{ border-color:var(--bad); color:var(--bad); }
+  .node-body{ padding:2px 10px 9px; }
+  .attr-row{ display:flex; align-items:center; gap:5px; margin-top:5px; }
+  .attr-row .k{ font-size:8.5px; color:var(--muted); text-transform:uppercase; letter-spacing:0.05em;
+    width:100%; margin-bottom:2px; }
+  .attr-row-wrap{ margin-top:5px; }
+  .attr-value-input{ width:100%; background:var(--bg); border:1px solid var(--border); border-radius:5px;
+    padding:4px 7px; font-size:10px; color:var(--text); }
+  .attr-del{ flex-shrink:0; width:16px; height:16px; border:none; background:transparent; color:var(--muted);
+    cursor:pointer; font-size:10px; }
+  .attr-del:hover{ color:var(--bad); }
+  .add-attr-btn{ margin-top:7px; width:100%; font-size:9.5px; padding:4px; border:1px dashed var(--border);
+    border-radius:5px; background:transparent; color:var(--muted); cursor:pointer; }
+  .add-attr-btn:hover{ border-color:var(--accent); color:var(--accent); }
+  .add-attr-form{ margin-top:6px; padding:7px; border:1px solid var(--border); border-radius:6px; background:var(--bg); }
+  .combo{ position:relative; }
+  .combo input{ width:100%; font-size:10.5px; padding:5px 7px; border:1px solid var(--border); border-radius:5px; background:#fff; }
+  .combo-list{ position:absolute; top:100%; left:0; right:0; background:#fff; border:1px solid var(--border);
+    border-radius:6px; max-height:160px; overflow-y:auto; z-index:200; display:none; margin-top:3px;
+    box-shadow:0 8px 24px rgba(20,15,60,0.15); }
+  .combo-list.open{ display:block; }
+  .combo-item{ padding:6px 8px; font-size:10.5px; cursor:pointer; border-bottom:1px solid #f1f0ec; }
+  .combo-item:last-child{ border-bottom:none; }
+  .combo-item:hover{ background:#EEEDFE; }
+  .combo-item .id{ display:block; font-size:9px; color:#9a97b3; }
+
+  /* INSPECTOR */
+  .inspector{ width:280px; flex-shrink:0; background:var(--surface); border-left:1px solid var(--border);
+    display:flex; flex-direction:column; overflow:hidden; }
+  .inspector-header{ padding:14px 16px 12px; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:8px; }
+  .inspector-title{ font-family:'Syne',sans-serif; font-size:10px; font-weight:700; letter-spacing:0.16em;
+    text-transform:uppercase; color:var(--muted); flex:1; }
+  .inspector-body{ flex:1; overflow-y:auto; padding:14px 16px; }
+  .inspector-section{ margin-bottom:18px; }
+  .inspector-section-title{ font-size:9px; font-weight:700; letter-spacing:0.16em; text-transform:uppercase;
+    color:var(--muted); margin-bottom:8px; font-family:'Syne',sans-serif; }
+  .empty-inspector{ display:flex; flex-direction:column; align-items:center; justify-content:center; height:100%;
+    gap:10px; color:var(--muted); text-align:center; }
+  .empty-inspector-icon{ font-size:26px; opacity:0.3; }
+  .empty-inspector-text{ font-size:11px; line-height:1.6; }
+  .conn-item{ display:flex; align-items:center; gap:6px; padding:6px 0; border-bottom:1px solid var(--border); font-size:10px; }
+  .conn-dot{ width:6px; height:6px; border-radius:50%; flex-shrink:0; }
+  .conn-label{ color:var(--muted); font-size:9px; font-style:italic; }
+  .conn-del{ margin-left:auto; color:var(--muted); cursor:pointer; font-size:11px; }
+  .conn-del:hover{ color:var(--bad); }
+  .rel-row{ display:flex; align-items:center; gap:8px; padding:7px 0; border-bottom:1px solid var(--border); }
+  .rel-row:last-child{ border-bottom:none; }
+  .rel-txt{ flex:1; min-width:0; }
+  .rel-target{ font-size:9.5px; color:var(--muted); margin-top:2px; line-height:1.4; }
+  .badge{ font-size:9.5px; font-weight:600; color:var(--accent); background:#EEEDFE; padding:1px 6px; border-radius:4px; }
+
+  /* MODAL */
+  .modal-overlay{ position:fixed; inset:0; background:rgba(0,0,0,0.55); backdrop-filter:blur(4px);
+    z-index:1000; display:flex; align-items:center; justify-content:center; }
+  .modal-overlay.hidden{ display:none; }
+  .modal{ background:var(--panel); border:1px solid var(--border-light); border-radius:12px; padding:22px;
+    width:400px; max-width:90vw; box-shadow:0 24px 80px rgba(0,0,0,0.18); }
+  .modal-title{ font-family:'Syne',sans-serif; font-size:14px; font-weight:700; margin-bottom:14px; }
+  .modal-field{ margin-bottom:12px; }
+  .modal-field label{ display:block; font-size:10px; color:var(--muted); margin-bottom:5px; }
+  .modal-field input, .modal-field select{ width:100%; background:var(--bg); border:1px solid var(--border);
+    border-radius:6px; padding:8px 10px; font-size:11px; color:var(--text); }
+  .modal-note{ font-size:10px; color:var(--muted); margin-top:-6px; margin-bottom:10px; line-height:1.5; }
+  .modal-actions{ display:flex; gap:8px; justify-content:flex-end; margin-top:16px; }
+
+  /* Turtle preview modal */
+  #turtleModal .modal{ width:640px; }
+  #turtleOut{ width:100%; height:320px; font-size:10.5px; background:#1d1b2e; color:#e8e7f0; border:none;
+    border-radius:8px; padding:12px; resize:vertical; }
+
+  /* Triple editor + live turtle panel */
+  .triple-panel{ display:flex; border-top:1px solid var(--border); background:var(--surface); height:230px; flex-shrink:0; }
+  .triple-form{ width:340px; flex-shrink:0; padding:12px 16px; border-right:1px solid var(--border); overflow-y:auto; }
+  .triple-turtle{ flex:1; display:flex; flex-direction:column; padding:12px 16px; min-width:0; }
+  .ttl-head-inline{ display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; gap:8px; flex-wrap:wrap; }
+  .ttl-head-inline input{ background:var(--bg); border:1px solid var(--border); border-radius:5px; padding:5px 7px; font-size:10px; color:var(--text); }
+  #turtleLive{ flex:1; width:100%; font-size:10.5px; background:#1d1b2e; color:#e8e7f0; border:none; border-radius:8px; padding:10px; resize:none; }
+  .tf-row{ margin-bottom:9px; }
+  .tf-row label{ display:block; font-size:10px; color:var(--muted); margin-bottom:4px; }
+  .tf-row select, .tf-row input{ width:100%; background:var(--bg); border:1px solid var(--border); border-radius:6px; padding:6px 8px; font-size:11px; color:var(--text); }
+  .tf-row select:disabled{ opacity:0.5; }
+  .triple-hint{ margin-top:6px; font-size:9.5px; color:var(--muted); line-height:1.45; }
+  .triple-hint strong{ color:var(--accent); }
+  .triple-panel.flash{ box-shadow: inset 0 0 0 2px var(--accent); transition: box-shadow .3s; }
+
+  /* STATUS BAR */
+  .statusbar{ height:26px; background:var(--surface); border-top:1px solid var(--border); display:flex;
+    align-items:center; padding:0 16px; gap:16px; font-size:10px; color:var(--muted); flex-shrink:0; }
+  .status-dot{ width:6px; height:6px; border-radius:50%; background:var(--good); }
+
+  .drag-ghost{ position:fixed; pointer-events:none; z-index:9999; background:var(--panel); border:1px solid var(--accent);
+    border-radius:8px; padding:8px 14px; font-size:11px; color:var(--accent); box-shadow:0 8px 32px rgba(0,0,0,0.12);
+    opacity:0.92; }
+  .drag-ghost.hidden{ display:none; }
+  body.linking{ cursor:crosshair !important; }
+
+  .mode-hint{ position:sticky; bottom:14px; left:14px; z-index:60; margin:14px; display:inline-block;
+    font-size:11.5px; color:var(--text); background:rgba(255,255,255,0.95); border:1px solid var(--border);
+    padding:7px 12px; border-radius:8px; max-width:420px; box-shadow:0 4px 16px rgba(0,0,0,0.08); pointer-events:none; }
+  .mode-hint.linking-mode{ border-color:var(--warn); background:#FFFBEB; }
+  .mode-hint kbd{ font-family:'DM Mono',monospace; background:var(--bg); border:1px solid var(--border);
+    border-radius:3px; padding:1px 5px; font-size:10px; }
+
+  /* Context menu */
+  .context-menu{ position:fixed; background:var(--panel); border:1px solid var(--border-light); border-radius:8px;
+    padding:6px 0; z-index:999; min-width:170px; box-shadow:0 12px 40px rgba(0,0,0,0.14); }
+  .context-menu.hidden{ display:none; }
+  .ctx-item{ padding:8px 14px; font-size:11.5px; cursor:pointer; color:var(--text); display:flex; align-items:center; gap:8px; }
+  .ctx-item:hover{ background:var(--bg); }
+  .ctx-item.danger{ color:var(--bad); }
+  .ctx-sep{ height:1px; background:var(--border); margin:4px 0; }
+
+  /* bigger, clearer node action buttons */
+  .node-btn{ width:24px; height:24px; }
+  .canvas-node{ cursor:grab; }
+  .canvas-node:active{ cursor:grabbing; }
+  .node-header{ cursor:grab; }
+  .node-header:active{ cursor:grabbing; }
+  .canvas-toolbar{ position:absolute; top:10px; right:12px; display:flex; align-items:center; gap:6px; z-index:30; background:rgba(255,255,255,0.92); border:1px solid var(--border); border-radius:999px; padding:4px 8px; box-shadow:0 2px 10px rgba(0,0,0,0.08); }
+  .canvas-toolbar .btn{ padding:4px 8px; min-width:28px; }
+  .canvas-toolbar .zoom-label{ font-size:12px; color:var(--muted); min-width:44px; text-align:center; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">Éditeur d'instanciation <span>ontology graph editor</span></div>
+  <div class="header-sep"></div>
+  <div class="header-info" id="headerInfo">Aucune ontologie chargée</div>
+  <div class="header-actions">
+    <button class="btn" onclick="clearCanvas()">↺ Effacer</button>
+    <button class="btn" onclick="exportJSON()">⬇ JSON</button>
+    <button class="btn btn-primary" onclick="downloadTurtle()">⬇ Turtle (.ttl)</button>
+  </div>
+</header>
+
+<div class="workspace">
+
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+    <div class="sidebar-block">
+      <div class="sidebar-title">1 · Ontologie (Turtle / RDF / OWL)</div>
+      <textarea class="onto-input" id="ontologyInput" placeholder="Colle du Turtle, RDF/XML ou OWL (CIDOC-CRM, OntoExhibit, Display…)"></textarea>
+      <div class="row">
+        <input type="text" id="ontologyUrl" placeholder="https://w3id.org/OntoExhibit" style="flex:1; min-width:0;">
+        <button class="btn" onclick="importOntologyFromUrl()">Importer URL</button>
+      </div>
+      <div class="row">
+        <input type="file" id="fileInput" accept=".ttl,.txt,.rdf,.owl,.xml,text/turtle,application/rdf+xml,application/xml" style="display:none;">
+        <button class="btn" onclick="document.getElementById('fileInput').click()">Charger fichier</button>
+      </div>
+      <div class="row">
+        <button class="btn btn-primary" style="flex:1;" onclick="parseOntologyInput()">+ Ajouter à l'ontologie chargée</button>
+      </div>
+      <div class="row">
+        <button class="btn" style="flex:1;" onclick="resetOntology()">↺ Réinitialiser l'ontologie</button>
+      </div>
+      <div class="stat" id="ontoStats">En attente d'une ontologie.</div>
+    </div>
+    <div class="sidebar-block" style="border-bottom:none; flex:1; display:flex; flex-direction:column; overflow:hidden;">
+      <div class="sidebar-title">2 · Types d'entités (glisser sur le canevas)</div>
+      <input class="search-box" type="text" id="searchInput" placeholder="Rechercher une classe…" oninput="filterEntities(this.value)">
+      <div class="entity-list" id="entityList"><div class="empty-list">Analyse une ontologie pour voir apparaître ses classes ici.</div></div>
+    </div>
+  </div>
+
+  <!-- CANVAS -->
+  <div class="canvas-area" id="canvasArea" ondragover="onDragOver(event)" ondrop="onDrop(event)">
+    <div class="canvas-inner" id="canvasInner">
+      <div class="canvas-bg"></div>
+      <svg id="edges-svg">
+        <defs>
+          <marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto">
+            <path d="M0,0 L0,6 L8,3 z" fill="#9a97b3"/>
+          </marker>
+        </defs>
+      </svg>
+      <div id="canvasNodes"></div>
+      <div class="drop-hint" id="dropHint">
+        <div class="drop-hint-icon">⬡</div>
+        <div class="drop-hint-text">Glisse une classe ici</div>
+        <div class="drop-hint-sub">Puis relie les nœuds et remplis leurs attributs</div>
+      </div>
+    </div>
+    <div class="canvas-toolbar" id="canvasToolbar">
+      <button class="btn small" onclick="zoomCanvas(-0.1)">−</button>
+      <div class="zoom-label" id="zoomLevel">100%</div>
+      <button class="btn small" onclick="zoomCanvas(0.1)">+</button>
+      <button class="btn small" onclick="resetCanvasZoom()">⌂</button>
+    </div>
+    <div class="mode-hint" id="modeHint">Glisse une carte pour la déplacer · clic droit pour Relier / Dupliquer / Supprimer · <kbd>Suppr</kbd> pour effacer le nœud sélectionné</div>
+  </div>
+
+  <!-- Context menu -->
+  <div class="context-menu hidden" id="contextMenu">
+    <div class="ctx-item" onclick="startLinkFromContext()">⟶ Relier à un autre nœud</div>
+    <div class="ctx-item" onclick="duplicateFromContext()">⧉ Dupliquer</div>
+    <div class="ctx-sep"></div>
+    <div class="ctx-item danger" onclick="deleteFromContext()">✕ Supprimer le nœud</div>
+  </div>
+
+  <!-- INSPECTOR -->
+  <div class="inspector">
+    <div class="inspector-header">
+      <div class="inspector-title">Inspecteur</div>
+    </div>
+    <div class="inspector-body" id="inspectorBody">
+      <div class="empty-inspector">
+        <div class="empty-inspector-icon">⬡</div>
+        <div class="empty-inspector-text">Sélectionne un nœud pour voir ses connexions et actions</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="statusbar">
+  <div class="status-dot"></div>
+  <span id="statusOnto">Aucune ontologie</span>
+  <span id="statusNodes">0 nœud</span>
+  <span id="statusEdges">0 relation(s)</span>
+</div>
+
+<div class="drag-ghost hidden" id="dragGhost"></div>
+
+<!-- Éditeur de triplets + Turtle en direct -->
+<div class="triple-panel">
+  <div class="triple-form">
+    <div class="sidebar-title">Éditeur de triplets</div>
+    <div class="tf-row">
+      <label>Sujet</label>
+      <select id="tripleSubject" onchange="onTripleSubjectChange()"><option value="">— choisir un nœud —</option></select>
+    </div>
+    <div class="tf-row">
+      <label>Prédicat (selon la classe du sujet)</label>
+      <select id="triplePredicate" onchange="onTriplePredicateChange()" disabled><option value="">— choisir un sujet d'abord —</option></select>
+    </div>
+    <div class="tf-row" id="tripleObjectWrap">
+      <label>Objet</label>
+      <select id="tripleObjectNode" style="display:none;"></select>
+      <input type="text" id="tripleObjectLiteral" placeholder="valeur littérale" style="display:none;">
+      <div class="triple-hint" id="tripleContextHint"></div>
+    </div>
+    <button class="btn btn-primary" style="width:100%;margin-top:4px;" onclick="addTripleFromForm()">+ Ajouter le triplet</button>
+    <div class="warn-box" id="tripleWarn" style="display:none;"></div>
+  </div>
+  <div class="triple-turtle">
+    <div class="ttl-head-inline">
+      <div class="sidebar-title" style="margin-bottom:0;">Turtle (modifiable)</div>
+      <div class="row" style="margin-top:0;align-items:center;">
+        <input type="text" id="instPrefix" value="inst" onchange="updateTurtleLive()" style="width:70px;" title="Préfixe des instances">
+        <input type="text" id="instBase" value="https://example.org/instances#" onchange="updateTurtleLive()" style="width:200px;" title="IRI de base des instances">
+        <button class="btn small" onclick="copyTurtle()">Copier</button>
+        <button class="btn small" onclick="downloadTurtle()">Télécharger .ttl</button>
+        <button class="btn small btn-primary" onclick="importTurtleInstances()">Importer ce Turtle</button>
+      </div>
+    </div>
+    <div class="warn-box" id="turtleSyncNote" style="display:none;margin-bottom:6px;">
+      Édition manuelle en cours — le texte ne se met plus à jour automatiquement. Clique « Importer ce Turtle » pour l'appliquer au graphe, ou <a href="#" onclick="resyncTurtle();return false;" style="color:inherit;text-decoration:underline;">resynchronise</a> pour revenir à l'aperçu généré depuis le graphe.
+    </div>
+    <textarea id="turtleLive" oninput="onTurtleManualEdit()"></textarea>
+  </div>
+</div>
+
+<script>
+/* ═══════════════════ TURTLE-ISH PARSER ═══════════════════ */
+function splitStatements(text){
+  let statements=[]; let buf=''; let i=0; const n=text.length;
+  while(i<n){
+    if(text.startsWith('"""', i)){ let end=text.indexOf('"""', i+3); end=(end===-1)?n:end+3; buf+=text.slice(i,end); i=end; continue; }
+    if(text.startsWith("'''", i)){ let end=text.indexOf("'''", i+3); end=(end===-1)?n:end+3; buf+=text.slice(i,end); i=end; continue; }
+    let ch=text[i];
+    if(ch==='"'){ let end=i+1; while(end<n && text[end]!=='"'){ if(text[end]==='\\') end++; end++; } end++; buf+=text.slice(i,end); i=end; continue; }
+    if(ch==="'"){ let end=i+1; while(end<n && text[end]!=="'"){ if(text[end]==='\\') end++; end++; } end++; buf+=text.slice(i,end); i=end; continue; }
+    if(ch==='<'){ let end=text.indexOf('>', i); end=(end===-1)?n:end+1; buf+=text.slice(i,end); i=end; continue; }
+    if(ch==='#'){ let end=text.indexOf('\n', i); end=(end===-1)?n:end; i=end; continue; }
+    if(ch==='.'){ let next=text[i+1]; if(next===undefined || /\s/.test(next)){ statements.push(buf.trim()); buf=''; i++; continue; } }
+    buf+=ch; i++;
+  }
+  if(buf.trim()) statements.push(buf.trim());
+  return statements;
+}
+function tokenize(stmt){
+  let tokens=[]; let i=0; const n=stmt.length;
+  while(i<n){
+    let ch=stmt[i];
+    if(/\s/.test(ch)){ i++; continue; }
+    if(stmt.startsWith('"""', i)){ let end=stmt.indexOf('"""', i+3); end=end===-1?n:end+3; tokens.push(stmt.slice(i,end)); i=end; continue; }
+    if(ch==='"'){ let end=i+1; while(end<n && stmt[end]!=='"'){ if(stmt[end]==='\\') end++; end++; } end++; tokens.push(stmt.slice(i,end)); i=end; continue; }
+    if(ch==='<'){ let end=stmt.indexOf('>', i); end=end===-1?n:end+1; tokens.push(stmt.slice(i,end)); i=end; continue; }
+    if(ch===';' || ch===','){ tokens.push(ch); i++; continue; }
+    let start=i;
+    while(i<n && !/\s/.test(stmt[i]) && stmt[i]!==';' && stmt[i]!==','){ i++; }
+    tokens.push(stmt.slice(start,i));
+  }
+  return tokens;
+}
+function parseStatementTokens(tokens){
+  if(tokens.length<3) return null;
+  const subject=tokens[0]; let triples=[]; let k=1; let currentPredicate=null;
+  while(k<tokens.length){
+    if(currentPredicate===null){ currentPredicate=tokens[k]; k++; continue; }
+    let obj=tokens[k]; k++;
+    triples.push([subject,currentPredicate,obj]);
+    if(tokens[k]===','){ k++; continue; }
+    if(tokens[k]===';'){ k++; currentPredicate=null; continue; }
+    break;
+  }
+  return triples;
+}
+function localName(term){
+  if(!term) return '';
+  let normalized = term.trim();
+  if(normalized.startsWith('<') && normalized.endsWith('>')) normalized = normalized.slice(1,-1);
+  if(/^[A-Za-z][\w-]*:/.test(normalized)) normalized = normalized.split(':').slice(1).join(':');
+  let idx=Math.max(normalized.lastIndexOf('#'), normalized.lastIndexOf('/'), normalized.lastIndexOf(':'));
+  return normalized.slice(idx+1);
+}
+function resolvePrefixedName(term, prefixMap){
+  if(!term) return term;
+  let normalized = term.trim();
+  if(normalized.startsWith('<') && normalized.endsWith('>')) return normalized.slice(1,-1);
+  const match = normalized.match(/^([A-Za-z][\w-]*):(.*)$/);
+  if(match && prefixMap[match[1]]) return prefixMap[match[1]] + match[2];
+  return normalized;
+}
+function shorten(term, prefixMap){
+  const iri = resolvePrefixedName(term, prefixMap);
+  if(iri.startsWith('http://') || iri.startsWith('https://')){
+    for(const [p,ns] of Object.entries(prefixMap)){ if(iri.startsWith(ns)) return p+':'+iri.slice(ns.length); }
+    return '<'+iri+'>';
+  }
+  return term;
+}
+function parsePrefixDeclarations(text){
+  const prefixMap = {};
+  const declRegexes = [
+    /@prefix\s+([\w-]*):\s*<([^>]+)>\s*\./gi,
+    /PREFIX\s+([\w-]*):\s*<([^>]+)>/gi,
+    /@base\s*<([^>]+)>\s*\./gi,
+    /BASE\s*<([^>]+)>/gi
+  ];
+  declRegexes.forEach(regex=>{
+    let m;
+    while((m=regex.exec(text))){
+      if(regex.source.startsWith('@base') || regex.source.startsWith('BASE')) continue;
+      prefixMap[m[1]] = m[2];
+    }
+  });
+  return prefixMap;
+}
+function literalText(tok){
+  let m=tok.match(/^"""([\s\S]*)"""(@[\w-]+|\^\^\S+)?$/); if(m) return m[1];
+  m=tok.match(/^"([^"\\]*(?:\\.[^"\\]*)*)"(@[\w-]+|\^\^\S+)?$/);
+  if(m) return m[1].replace(/\\"/g,'"').replace(/\\n/g,'\n');
+  return tok;
+}
+function buildOntologyFromRdfXml(text){
+  const doc = new DOMParser().parseFromString(text, 'application/xml');
+  const parserErrors = doc.getElementsByTagName('parsererror');
+  if(parserErrors.length) throw new Error('Fichier RDF/XML invalide');
+  const classes={}, properties={}, labelMap={}, commentMap={};
+  function ensureClass(id){ if(!classes[id]) classes[id]={id,supers:new Set()}; return classes[id]; }
+  function ensureProperty(id){ if(!properties[id]) properties[id]={id,domain:new Set(),range:new Set(),type:'unknown'}; return properties[id]; }
+  function addLabel(id, val){ if(val && !labelMap[id]) labelMap[id]=val; }
+  function addComment(id, val){ if(val && !commentMap[id]) commentMap[id]=val; }
+  function nodeName(el){ return (el.nodeName || '').split(':').pop(); }
+  function elementText(el){ return (el.textContent || '').trim(); }
+  function getSubjectId(el){
+    return el.getAttribute('rdf:about') || el.getAttribute('rdf:ID') || el.getAttribute('rdf:resource') || el.getAttribute('about') || el.getAttribute('resource') || null;
+  }
+  const allElements = Array.from(doc.documentElement.getElementsByTagName('*'));
+  allElements.forEach(el=>{
+    const tag = nodeName(el).toLowerCase();
+    const subject = getSubjectId(el);
+    if(!subject) return;
+    if(tag === 'class'){ 
+      ensureClass(subject);
+      Array.from(el.children).forEach(child=>{
+        const childTag = nodeName(child).toLowerCase();
+        if(childTag === 'subclassof'){ const obj = child.getAttribute('rdf:resource') || child.getAttribute('resource') || null; if(obj){ ensureClass(subject).supers.add(obj); ensureClass(obj); } }
+        else if(childTag === 'label'){ addLabel(subject, elementText(child)); }
+        else if(childTag === 'comment'){ addComment(subject, elementText(child)); }
+      });
+    } else if(tag === 'objectproperty' || tag === 'datatypeproperty' || tag === 'property'){
+      const prop = ensureProperty(subject);
+      if(tag === 'objectproperty') prop.type='object';
+      if(tag === 'datatypeproperty') prop.type='datatype';
+      Array.from(el.children).forEach(child=>{
+        const childTag = nodeName(child).toLowerCase();
+        const resource = child.getAttribute('rdf:resource') || child.getAttribute('resource') || null;
+        if(childTag === 'domain' && resource){ ensureProperty(subject).domain.add(resource); }
+        else if(childTag === 'range' && resource){ ensureProperty(subject).range.add(resource); }
+        else if(childTag === 'label'){ addLabel(subject, elementText(child)); }
+        else if(childTag === 'comment'){ addComment(subject, elementText(child)); }
+      });
+    }
+  });
+  return {prefixMap:{}, classes, properties, labelMap, commentMap};
+}
+function buildOntology(text){
+  const prefixMap = parsePrefixDeclarations(text);
+  const statements=splitStatements(text);
+  const classes={}, properties={}, labelMap={}, commentMap={};
+  function ensureClass(id){ if(!classes[id]) classes[id]={id,supers:new Set()}; return classes[id]; }
+  function ensureProperty(id){ if(!properties[id]) properties[id]={id,domain:new Set(),range:new Set(),type:'unknown'}; return properties[id]; }
+  function normalizeTerm(term){
+    if(!term) return term;
+    return shorten(term, prefixMap);
+  }
+  function isLiteralToken(tok){
+    if(!tok) return true;
+    return /^"""|^"|^\d|^true$|^false$/i.test(tok) || /^-?\d/.test(tok);
+  }
+  function isResourceToken(tok){
+    if(!tok || isLiteralToken(tok)) return false;
+    return tok.startsWith('<') || /^[A-Za-z][\w-]*:/.test(tok) || tok.startsWith('http://') || tok.startsWith('https://');
+  }
+  function classifyObject(objTerm){
+    const objShort = normalizeTerm(objTerm);
+    const objLocal = localName(objShort).toLowerCase();
+    if(objLocal==='class'){ ensureClass(objShort); return 'class'; }
+    if(objLocal==='objectproperty'){ ensureProperty(objShort).type='object'; return 'objectproperty'; }
+    if(objLocal==='datatypeproperty'){ ensureProperty(objShort).type='datatype'; return 'datatypeproperty'; }
+    if(objLocal==='property'){ ensureProperty(objShort); return 'property'; }
+    return null;
+  }
+  for(const stmt of statements){
+    if(/^@prefix/i.test(stmt) || /^@base/i.test(stmt) || /^PREFIX/i.test(stmt) || /^BASE/i.test(stmt)) continue;
+    const tokens=tokenize(stmt); const triples=parseStatementTokens(tokens); if(!triples) continue;
+    for(let [s,p,o] of triples){
+      const subjectId = normalizeTerm(s);
+      const predRaw = p==='a' ? 'a' : normalizeTerm(p);
+      const objShort = normalizeTerm(o);
+      const predLocal = predRaw==='a' ? 'type' : localName(predRaw).toLowerCase();
+      if(predLocal==='type'){
+        const classified = classifyObject(o);
+        if(classified === 'class') ensureClass(subjectId);
+        else if(classified === 'objectproperty' || classified === 'datatypeproperty' || classified === 'property') ensureProperty(subjectId);
+        else if(isResourceToken(o)) ensureClass(subjectId);
+      } else if(predLocal==='subclassof'){ ensureClass(subjectId).supers.add(objShort); ensureClass(objShort); }
+      else if(predLocal==='domain'){ ensureProperty(subjectId).domain.add(objShort); }
+      else if(predLocal==='range'){ ensureProperty(subjectId).range.add(objShort); }
+      else if(predLocal==='label' || predLocal==='preflabel'){ labelMap[subjectId]=literalText(objShort); }
+      else if(predLocal==='comment'){ commentMap[subjectId]=literalText(objShort); }
+      else if(isResourceToken(p) && predLocal!=='type' && predLocal!=='label' && predLocal!=='comment' && predLocal!=='subclassof' && predLocal!=='domain' && predLocal!=='range'){
+        ensureProperty(predRaw);
+      }
+      if(isResourceToken(s) && predLocal==='type' && localName(objShort).toLowerCase() === 'class') ensureClass(subjectId);
+      if(isResourceToken(s) && predLocal==='type' && localName(objShort).toLowerCase() === 'objectproperty') ensureProperty(subjectId).type='object';
+      if(isResourceToken(s) && predLocal==='type' && localName(objShort).toLowerCase() === 'datatypeproperty') ensureProperty(subjectId).type='datatype';
+    }
+  }
+  return {prefixMap, classes, properties, labelMap, commentMap};
+}
+function ancestors(classId, classes){
+  const result=new Set([classId]); const queue=[classId];
+  while(queue.length){
+    const c=queue.shift(); const cls=classes[c]; if(!cls) continue;
+    for(const s of cls.supers){ if(!result.has(s)){ result.add(s); queue.push(s); } }
+  }
+  return result;
+}
+function findRoot(classId, classes, memo){
+  if(memo[classId]) return memo[classId];
+  const cls = classes[classId];
+  if(!cls || cls.supers.size===0){ memo[classId]=classId; return classId; }
+  const superArr = [...cls.supers].sort();
+  const root = findRoot(superArr[0], classes, memo);
+  memo[classId] = root;
+  return root;
+}
+
+const PALETTE = ['#f5c842','#60c8f0','#ffaec0','#7fdb87','#f99a45','#b0b8d0','#c4906a','#86c8d8','#d98cf0','#8899cc'];
+
+/* ═══════════════════ APP STATE ═══════════════════ */
+let ontology = null;
+let entityTypes = []; // [{id,label,group,color}]
+let nodes = {};   // id -> {id, classId, name, x, y, attrs:{propId:value}, originCurie?}
+let edges = [];   // {id, from, to, predicate}
+let nodeCounter = 0, edgeCounter = 0;
+let selectedNodeId = null;
+let dragging = null;
+let dragMoved = false;
+let dragItem = null;
+let contextNodeId = null;
+let turtleManualEdit = false;
+let linkState = null;
+
+const $ = (id)=>document.getElementById(id);
+let canvasZoom = 1;
+function applyCanvasZoom(nextZoom){
+  canvasZoom = Math.max(0.5, Math.min(2.5, nextZoom));
+  const inner = $('canvasInner');
+  if(inner){
+    inner.style.transform = `scale(${canvasZoom})`;
+    inner.style.transformOrigin = 'top left';
+    inner.style.width = `${2600 * canvasZoom}px`;
+    inner.style.height = `${1600 * canvasZoom}px`;
+  }
+  const zoomEl = $('zoomLevel');
+  if(zoomEl) zoomEl.textContent = `${Math.round(canvasZoom * 100)}%`;
+  redrawEdges();
+  if(linkState) updateLinkPreview();
+}
+function zoomCanvas(delta){ applyCanvasZoom(canvasZoom + delta); }
+function resetCanvasZoom(){ applyCanvasZoom(1); }
+
+const SAMPLE_TTL = `@prefix crm: <http://www.cidoc-crm.org/cidoc-crm/> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+
+crm:E1_CRM_Entity a owl:Class ; rdfs:label "CRM Entity" .
+crm:E39_Actor a owl:Class ; rdfs:subClassOf crm:E1_CRM_Entity ; rdfs:label "Actor" .
+crm:E21_Person a owl:Class ; rdfs:subClassOf crm:E39_Actor ; rdfs:label "Person" .
+crm:E40_Legal_Body a owl:Class ; rdfs:subClassOf crm:E39_Actor ; rdfs:label "Legal Body" .
+crm:E18_Physical_Thing a owl:Class ; rdfs:subClassOf crm:E1_CRM_Entity ; rdfs:label "Physical Thing" .
+crm:E19_Physical_Object a owl:Class ; rdfs:subClassOf crm:E18_Physical_Thing ; rdfs:label "Physical Object" .
+crm:E22_Man-Made_Object a owl:Class ; rdfs:subClassOf crm:E19_Physical_Object ; rdfs:label "Man-Made Object" .
+crm:E24_Physical_Man-Made_Thing a owl:Class ; rdfs:subClassOf crm:E19_Physical_Object ; rdfs:label "Physical Man-Made Thing" .
+crm:E7_Activity a owl:Class ; rdfs:subClassOf crm:E1_CRM_Entity ; rdfs:label "Activity" .
+crm:E65_Creation a owl:Class ; rdfs:subClassOf crm:E7_Activity ; rdfs:label "Creation" .
+crm:E12_Production a owl:Class ; rdfs:subClassOf crm:E7_Activity ; rdfs:label "Production" .
+crm:E8_Acquisition a owl:Class ; rdfs:subClassOf crm:E7_Activity ; rdfs:label "Acquisition" .
+crm:E52_Time-Span a owl:Class ; rdfs:subClassOf crm:E1_CRM_Entity ; rdfs:label "Time-Span" .
+crm:E28_Conceptual_Object a owl:Class ; rdfs:subClassOf crm:E1_CRM_Entity ; rdfs:label "Conceptual Object" .
+crm:E53_Place a owl:Class ; rdfs:subClassOf crm:E1_CRM_Entity ; rdfs:label "Place" .
+
+crm:P14_carried_out_by a owl:ObjectProperty ; rdfs:label "carried out by" ;
+  rdfs:domain crm:E7_Activity ; rdfs:range crm:E39_Actor .
+crm:P108_has_produced a owl:ObjectProperty ; rdfs:label "has produced" ;
+  rdfs:domain crm:E12_Production ; rdfs:range crm:E24_Physical_Man-Made_Thing .
+crm:P94_has_created a owl:ObjectProperty ; rdfs:label "has created" ;
+  rdfs:domain crm:E65_Creation ; rdfs:range crm:E28_Conceptual_Object .
+crm:P52_has_current_owner a owl:ObjectProperty ; rdfs:label "has current owner" ;
+  rdfs:domain crm:E18_Physical_Thing ; rdfs:range crm:E39_Actor .
+crm:P4_has_time-span a owl:ObjectProperty ; rdfs:label "has time-span" ;
+  rdfs:domain crm:E1_CRM_Entity ; rdfs:range crm:E52_Time-Span .
+crm:P7_took_place_at a owl:ObjectProperty ; rdfs:label "took place at" ;
+  rdfs:domain crm:E7_Activity ; rdfs:range crm:E53_Place .
+crm:P3_has_note a owl:DatatypeProperty ; rdfs:label "has note" ;
+  rdfs:domain crm:E1_CRM_Entity ; rdfs:range rdfs:Literal .
+crm:P82_at_some_time_within a owl:DatatypeProperty ; rdfs:label "at some time within" ;
+  rdfs:domain crm:E52_Time-Span ; rdfs:range rdfs:Literal .
+`;
+
+/* ═══════════════════ ONTOLOGY LOADING ═══════════════════ */
+$('fileInput').onchange = (e)=>{
+  const f = e.target.files[0]; if(!f) return;
+  const reader = new FileReader();
+  reader.onload = ()=>{ $('ontologyInput').value = reader.result; parseOntologyInput(); };
+  reader.readAsText(f);
+};
+
+async function importOntologyFromUrl(){
+  const url = ($('ontologyUrl').value || '').trim();
+  if(!url){ alert('Entre une adresse URL d’ontologie.'); return; }
+  try{
+    const headers = { Accept: 'application/rdf+xml, text/turtle, application/xml, text/plain, */*' };
+    let response = await fetch(url, { headers });
+    if(!response.ok) throw new Error(`HTTP ${response.status}`);
+    const contentType = (response.headers.get('content-type') || '').toLowerCase();
+    let text = await response.text();
+    if(contentType.includes('text/html') || contentType.includes('application/xhtml')){
+      const linkRegex = /https?:\/\/[^"'\s<>]+\.(?:ttl|owl|rdf|xml|nt|n3|jsonld)(?:[^"'\s<>]*)/gi;
+      const matches = [...text.matchAll(linkRegex)];
+      const candidate = matches[0]?.[0];
+      if(candidate){
+        const resolved = new URL(candidate, url).toString();
+        const rdfResponse = await fetch(resolved, { headers });
+        if(rdfResponse.ok){ text = await rdfResponse.text(); }
+      } else {
+        const proxyUrl = 'https://r.jina.ai/http://' + url.replace(/^https?:\/\//, '');
+        const proxyResponse = await fetch(proxyUrl, { headers: { Accept: 'text/plain, */*' } });
+        if(proxyResponse.ok){ text = await proxyResponse.text(); }
+      }
+    }
+    $('ontologyInput').value = text;
+    parseOntologyInput();
+  } catch(err){
+    $('ontoStats').textContent = 'Échec d’import depuis l’URL : ' + err.message;
+    console.error(err);
+  }
+}
+
+function mergeOntologyInto(target, addition){
+  Object.assign(target.prefixMap, addition.prefixMap);
+  for(const [id, cls] of Object.entries(addition.classes)){
+    if(!target.classes[id]) target.classes[id] = {id, supers:new Set()};
+    for(const s of cls.supers) target.classes[id].supers.add(s);
+  }
+  for(const [id, prop] of Object.entries(addition.properties)){
+    if(!target.properties[id]) target.properties[id] = {id, domain:new Set(), range:new Set(), type:'unknown'};
+    for(const d of prop.domain) target.properties[id].domain.add(d);
+    for(const r of prop.range) target.properties[id].range.add(r);
+    if(prop.type !== 'unknown') target.properties[id].type = prop.type;
+  }
+  for(const [id, label] of Object.entries(addition.labelMap)){ if(!target.labelMap[id]) target.labelMap[id] = label; }
+  for(const [id, c] of Object.entries(addition.commentMap)){ if(!target.commentMap[id]) target.commentMap[id] = c; }
+}
+function parseOntologyText(text){
+  let cleaned = (text || '').trim();
+  if(!cleaned) return null;
+  cleaned = cleaned.replace(/^```(?:turtle|ttl|rdf|xml|owl)?\s*/i, '').replace(/\s*```$/i, '');
+  cleaned = cleaned.replace(/^```[\s\S]*?```$/i, (m)=>m.replace(/^```[\w-]*\s*/i, '').replace(/\s*```$/i, ''));
+  if(cleaned.startsWith('<')) return buildOntologyFromRdfXml(cleaned);
+  return buildOntology(cleaned);
+}
+function parseOntologyInput(){
+  const text = $('ontologyInput').value;
+  if(!text.trim()){ $('ontoStats').textContent = "Colle ou charge d'abord un fichier Turtle/RDF/OWL."; return; }
+  try{
+    const parsed = parseOntologyText(text);
+    const addedClasses = Object.keys(parsed.classes).length;
+    const addedProps = Object.keys(parsed.properties).length;
+    if(!ontology){ ontology = parsed; }
+    else { mergeOntologyInto(ontology, parsed); }
+    buildEntityTypes();
+    const nClasses = Object.keys(ontology.classes).length;
+    const nProps = Object.keys(ontology.properties).length;
+    $('ontoStats').innerHTML = `+${addedClasses} classes / +${addedProps} propriétés depuis ce texte · <b>${nClasses}</b> classes et <b>${nProps}</b> propriétés au total.`;
+    if(addedClasses===0 && addedProps===0){
+      const onlyPrefixes = /@prefix\s+|PREFIX\s+/i.test(text);
+      const hint = onlyPrefixes
+        ? "Ce texte ne contient que des déclarations de préfixes. Ajoute des assertions de classes/propriétés, par exemple : crm:E1_CRM_Entity a owl:Class ."
+        : "Aucune nouvelle classe détectée dans ce texte — vérifie qu'il s'agit bien de Turtle, RDF/XML ou OWL avec owl:Class / rdfs:subClassOf.";
+      $('ontoStats').innerHTML += `<div class="warn-box">${hint}</div>`;
+    }
+    $('headerInfo').textContent = `${nClasses} classes · ${nProps} propriétés chargées (toutes ontologies confondues)`;
+    $('statusOnto').textContent = `Ontologie : ${nClasses} classes`;
+    renderEntityList(entityTypes);
+    $('ontologyInput').value = '';
+  }catch(err){
+    $('ontoStats').textContent = "Erreur d'analyse : " + err.message;
+  }
+}
+function resetOntology(){
+  if(!confirm("Réinitialiser efface toutes les classes/propriétés chargées (les nœuds déjà créés sur le canevas restent, mais perdront leurs suggestions de propriétés). Continuer ?")) return;
+  ontology = null;
+  entityTypes = [];
+  $('ontoStats').textContent = "En attente d'une ontologie.";
+  $('headerInfo').textContent = "Aucune ontologie chargée";
+  $('statusOnto').textContent = "Aucune ontologie";
+  renderEntityList([]);
+}
+
+function buildEntityTypes(){
+  const memo = {};
+  const roots = {};
+  Object.keys(ontology.classes).forEach(id=>{ roots[id] = findRoot(id, ontology.classes, memo); });
+  const rootList = [...new Set(Object.values(roots))].sort();
+  const colorFor = {};
+  rootList.forEach((r,i)=>{ colorFor[r] = PALETTE[i % PALETTE.length]; });
+  entityTypes = Object.keys(ontology.classes).map(id=>({
+    id,
+    label: ontology.labelMap[id] || id,
+    group: ontology.labelMap[roots[id]] || roots[id],
+    color: colorFor[roots[id]]
+  })).sort((a,b)=> a.group.localeCompare(b.group) || a.label.localeCompare(b.label));
+}
+
+function classLabel(id){ return (ontology && ontology.labelMap[id]) || id || '?'; }
+function propLabel(id){ return (ontology && ontology.labelMap[id]) || id; }
+function getEntityType(classId){ return entityTypes.find(t=>t.id===classId) || {id:classId, label:classLabel(classId), color:'#8899cc', group:''}; }
+
+function propertyDomainRangeText(prop){
+  const domainNames = [...prop.domain].map(classLabel);
+  const rangeNames = [...prop.range].map(classLabel);
+  const domainText = prop.domain.size===0 ? 'toutes classes' : domainNames.join(', ');
+  const rangeText = prop.range.size===0 ? 'toutes classes' : rangeNames.join(', ');
+  return ` (domain: ${domainText}; range: ${rangeText})`;
+}
+
+function propertyPriority(prop, classId){
+  if(prop.exactDomain) return 0;
+  if(prop.inheritedDomain) return 1;
+  if(prop.isGlobal) return 2;
+  return 3;
+}
+
+function sortPropertiesForClass(props, classId){
+  return props.sort((a,b)=>{
+    const pa = propertyPriority(a, classId);
+    const pb = propertyPriority(b, classId);
+    if(pa !== pb) return pa - pb;
+    return a.label.localeCompare(b.label);
+  });
+}
+
+function getDatatypePropsForClass(classId){
+  if(!ontology || !classId) return [];
+  return sortPropertiesForClass(Object.values(ontology.properties)
+    .filter(p=>p.type!=='object')
+    .filter(p=>propertyDomainMatches(p, classId))
+    .map(p=>({
+      id:p.id,
+      label:propLabel(p.id) + propertyDomainRangeText(p),
+      exactDomain: p.domain.has(normalizeOntologyId(classId)),
+      inheritedDomain: p.domain.size>0 && propertyDomainMatches(p, classId) && !p.domain.has(normalizeOntologyId(classId)),
+      isGlobal: p.domain.size===0
+    })), classId);
+}
+function getObjectPropsForPair(sourceClassId, targetClassId){
+  if(!ontology || !sourceClassId) return [];
+  return sortPropertiesForClass(Object.values(ontology.properties)
+    .filter(p=>p.type!=='datatype')
+    .filter(p=>propertyDomainMatches(p, sourceClassId))
+    .filter(p=>p.range.size===0 || !targetClassId || propertyRangeMatches(p, targetClassId))
+    .map(p=>({
+      id:p.id,
+      label:propLabel(p.id) + propertyDomainRangeText(p),
+      exactDomain: p.domain.has(normalizeOntologyId(sourceClassId)),
+      inheritedDomain: p.domain.size>0 && propertyDomainMatches(p, sourceClassId) && !p.domain.has(normalizeOntologyId(sourceClassId)),
+      isGlobal: p.domain.size===0
+    })), sourceClassId);
+}
+function getOutgoingRelationOptions(classId){
+  if(!ontology || !classId) return [];
+  return sortPropertiesForClass(Object.values(ontology.properties)
+    .filter(p=>p.type!=='datatype')
+    .filter(p=>propertyDomainMatches(p, classId))
+    .map(p=>({
+      id:p.id,
+      label:propLabel(p.id) + propertyDomainRangeText(p),
+      targets: [...p.range].map(r=>classLabel(r)),
+      exactDomain: p.domain.has(normalizeOntologyId(classId)),
+      inheritedDomain: p.domain.size>0 && propertyDomainMatches(p, classId) && !p.domain.has(normalizeOntologyId(classId)),
+      isGlobal: p.domain.size===0
+    })), classId);
+}
+function getIncomingRelationOptions(classId){
+  if(!ontology || !classId) return [];
+  return sortPropertiesForClass(Object.values(ontology.properties)
+    .filter(p=>p.type!=='datatype')
+    .filter(p=>propertyRangeMatches(p, classId))
+    .map(p=>({
+      id:p.id,
+      label:propLabel(p.id) + propertyDomainRangeText(p),
+      sources: [...p.domain].map(d=>classLabel(d)),
+      exactDomain: p.domain.has(normalizeOntologyId(classId)),
+      inheritedDomain: p.domain.size>0 && propertyDomainMatches(p, classId) && !p.domain.has(normalizeOntologyId(classId)),
+      isGlobal: p.domain.size===0
+    })), classId);
+}
+
+/* ═══════════════════ ENTITY PALETTE ═══════════════════ */
+function renderEntityList(list){
+  const el = $('entityList');
+  el.innerHTML = '';
+  if(!list.length){ el.innerHTML = '<div class="empty-list">Aucune classe. Analyse une ontologie ci-dessus.</div>'; return; }
+  const groups = {};
+  list.forEach(e=>{ (groups[e.group] = groups[e.group]||[]).push(e); });
+  for(const [group, items] of Object.entries(groups)){
+    const gl = document.createElement('div'); gl.className='entity-group-label'; gl.textContent=group; el.appendChild(gl);
+    items.forEach(e=>{
+      const div = document.createElement('div');
+      div.className = 'entity-item'; div.draggable = true; div.dataset.classId = e.id;
+      div.innerHTML = `<div class="entity-dot" style="background:${e.color}"></div>
+        <div class="entity-item-content">
+          <div class="entity-item-name">${e.label}</div>
+          <div class="entity-item-sub">${e.id}</div>
+        </div>`;
+      div.addEventListener('dragstart', onSidebarDragStart);
+      div.addEventListener('click', ()=>{ createNodeAtDefaultPosition(e.id); });
+      el.appendChild(div);
+    });
+  }
+}
+function filterEntities(query){
+  const q = query.toLowerCase();
+  const filtered = q ? entityTypes.filter(e=>e.label.toLowerCase().includes(q) || e.id.toLowerCase().includes(q) || e.group.toLowerCase().includes(q)) : entityTypes;
+  renderEntityList(filtered);
+}
+function onSidebarDragStart(e){
+  dragItem = e.currentTarget.dataset.classId;
+  e.dataTransfer.setData('text/plain', dragItem);
+  const ghost = $('dragGhost'); const et = getEntityType(dragItem);
+  ghost.textContent = et.label; ghost.classList.remove('hidden');
+}
+function onDragOver(e){ e.preventDefault(); }
+function onDrop(e){
+  e.preventDefault();
+  const classId = e.dataTransfer.getData('text/plain') || dragItem;
+  if(!classId) return;
+  const area = $('canvasArea'); const rect = area.getBoundingClientRect();
+  const x = e.clientX - rect.left + area.scrollLeft - 90;
+  const y = e.clientY - rect.top + area.scrollTop - 25;
+  createNode(classId, x, y);
+  $('dragGhost').classList.add('hidden'); dragItem = null;
+}
+document.addEventListener('dragend', ()=>{ $('dragGhost').classList.add('hidden'); });
+$('canvasArea').addEventListener('wheel', (e)=>{
+  if(!(e.ctrlKey || e.metaKey)) return;
+  e.preventDefault();
+  zoomCanvas(e.deltaY > 0 ? -0.1 : 0.1);
+}, {passive:false});
+applyCanvasZoom(1);
+
+/* ═══════════════════ NODE CRUD ═══════════════════ */
+function getDefaultNodePosition(){
+  const area = $('canvasArea');
+  const cols = 4;
+  const stepX = 240;
+  const stepY = 160;
+  const offsetX = area.scrollLeft + 40;
+  const offsetY = area.scrollTop + 40;
+  const occupied = new Set(Object.values(nodes).map(n=>`${Math.round((n.x - offsetX) / stepX)}:${Math.round((n.y - offsetY) / stepY)}`));
+  for(let row=0; row<80; row++){
+    for(let col=0; col<cols; col++){
+      const key = `${col}:${row}`;
+      if(!occupied.has(key)) return { x: offsetX + col * stepX, y: offsetY + row * stepY };
+    }
+  }
+  return { x: offsetX + (nodeCounter % cols) * stepX, y: offsetY + Math.floor(nodeCounter / cols) * stepY };
+}
+function createNodeAtDefaultPosition(classId){
+  const pos = getDefaultNodePosition();
+  return createNode(classId, pos.x, pos.y);
+}
+function createNode(classId, x, y){
+  const id = 'n' + (++nodeCounter);
+  nodes[id] = { id, classId, name: 'instance_' + id, x, y, attrs: {} };
+  renderNode(id);
+  updateDropHint(); updateStatus(); selectNode(id);
+  refreshAll();
+  return id;
+}
+function renderNode(id){
+  const node = nodes[id];
+  const et = getEntityType(node.classId);
+  const existing = $('cn_' + id); if(existing) existing.remove();
+
+  const div = document.createElement('div');
+  div.className = 'canvas-node'; div.id = 'cn_' + id;
+  div.style.left = node.x + 'px'; div.style.top = node.y + 'px';
+
+  const attrRows = Object.entries(node.attrs).map(([propId, value])=>`
+    <div class="attr-row-wrap">
+      <div class="k">${propLabel(propId)}</div>
+      <div class="attr-row">
+        <input class="attr-value-input" value="${(value||'').replace(/"/g,'&quot;')}" onchange="setAttr('${id}','${propId}',this.value)">
+        <button class="attr-del" onclick="removeAttr('${id}','${propId}')">✕</button>
+      </div>
+    </div>`).join('');
+
+  div.innerHTML = `
+    <div class="node-header">
+      <div class="node-color-bar" style="background:${et.color}"></div>
+      <div class="node-header-text">
+        <div class="node-class">${et.label}</div>
+        <input class="node-name-input" value="${node.name}" onclick="event.stopPropagation()" onmousedown="event.stopPropagation()" onchange="renameNode('${id}',this.value)">
+      </div>
+      <div class="node-actions">
+        <button class="node-btn link-btn" title="Relier à un autre nœud" onmousedown="event.stopPropagation()" onclick="event.stopPropagation(); startLinkingFromNode('${id}')">⟶</button>
+        <button class="node-btn del-btn" title="Supprimer ce nœud" onmousedown="event.stopPropagation()" onclick="event.stopPropagation(); deleteNode('${id}')">✕</button>
+      </div>
+    </div>
+    <div class="node-body">
+      ${attrRows}
+      <button class="add-attr-btn" onmousedown="event.stopPropagation()" onclick="toggleAddAttrForm('${id}')">+ attribut</button>
+      <div id="addAttrForm_${id}" style="display:none;"></div>
+    </div>
+  `;
+  // Whole-card dragging, except when starting from an interactive control (input/button/textarea)
+  div.addEventListener('mousedown', (e)=>{
+    const interactive = e.target.closest('input, textarea, button, select, .combo-list');
+    if(interactive) return;
+    startDragNode(e, id);
+  });
+  div.addEventListener('pointerdown', (e)=>{
+    if(e.target.closest('button')) return;
+    e.stopPropagation();
+  });
+  div.addEventListener('click', (e)=>{ if(!dragMoved) selectNode(id); });
+  div.addEventListener('contextmenu', (e)=>{ e.preventDefault(); showContextMenu(e, id); });
+  $('canvasNodes').appendChild(div);
+}
+function renameNode(id, value){ nodes[id].name = value || nodes[id].name; redrawEdges(); refreshAll(); }
+function setAttr(id, propId, value){ nodes[id].attrs[propId] = value; updateTurtleLive(); }
+function removeAttr(id, propId){ delete nodes[id].attrs[propId]; renderNode(id); if(selectedNodeId===id) markSelected(id); refreshAll(); }
+
+function toggleAddAttrForm(id){
+  const wrap = $('addAttrForm_' + id);
+  if(wrap.style.display === 'block'){ wrap.style.display = 'none'; wrap.innerHTML=''; return; }
+  const node = nodes[id];
+  const props = getDatatypePropsForClass(node.classId);
+  wrap.innerHTML = `
+    <div class="add-attr-form" onmousedown="event.stopPropagation()">
+      <div class="combo" id="attrCombo_${id}">
+        <input type="text" id="attrComboInput_${id}" placeholder="propriété…">
+        <div class="combo-list" id="attrComboList_${id}"></div>
+      </div>
+      <div class="row" style="margin-top:6px;">
+        <input type="text" id="attrValueInput_${id}" placeholder="valeur" style="flex:1;">
+        <button class="btn small" style="padding:4px 8px;" onclick="confirmAddAttr('${id}')">OK</button>
+      </div>
+    </div>`;
+  wrap.style.display = 'block';
+  makeCombo($('attrComboInput_' + id), $('attrComboList_' + id), ()=>props, ()=>{});
+}
+function confirmAddAttr(id){
+  const propId = $('attrComboInput_' + id).dataset.value;
+  const value = $('attrValueInput_' + id).value.trim();
+  if(!propId || !value){ alert('Choisis une propriété dans la liste et entre une valeur.'); return; }
+  nodes[id].attrs[propId] = value;
+  renderNode(id);
+  if(selectedNodeId === id) markSelected(id);
+  updateStatus();
+  refreshAll();
+}
+
+/* Combo widget (search dropdown) */
+function makeCombo(inputEl, listEl, getItems, onSelect){
+  function render(filter){
+    const items = getItems().filter(it => !filter || it.label.toLowerCase().includes(filter.toLowerCase()) || it.id.toLowerCase().includes(filter.toLowerCase()));
+    listEl.innerHTML = '';
+    if(items.length===0){ listEl.innerHTML = '<div class="combo-item" style="color:#9a97b3;">Aucun résultat</div>'; }
+    items.slice(0,60).forEach(it=>{
+      const d = document.createElement('div'); d.className='combo-item';
+      d.innerHTML = `${it.label}<span class="id">${it.id}</span>`;
+      d.onmousedown = (e)=>{ e.preventDefault(); inputEl.value = it.label; inputEl.dataset.value = it.id; listEl.classList.remove('open'); onSelect(it.id); };
+      listEl.appendChild(d);
+    });
+    listEl.classList.add('open');
+  }
+  inputEl.addEventListener('focus', ()=>render(inputEl.value));
+  inputEl.addEventListener('input', ()=>{ inputEl.dataset.value=''; render(inputEl.value); });
+  inputEl.addEventListener('blur', ()=>setTimeout(()=>listEl.classList.remove('open'), 150));
+}
+
+/* ═══════════════════ DRAGGING NODES ═══════════════════ */
+function clientToCanvasPoint(clientX, clientY){
+  const area = $('canvasArea').getBoundingClientRect();
+  const scale = canvasZoom || 1;
+  return { x: (clientX - area.left + area.scrollLeft) / scale, y: (clientY - area.top + area.scrollTop) / scale };
+}
+function startLinkingFromNode(id){
+  if(!nodes[id]) return;
+  linkState = { sourceId:id, pointer:null };
+  selectNode(id);
+  document.body.classList.add('linking');
+  const hint = $('modeHint');
+  if(hint){ hint.innerHTML = 'Relâche sur un autre nœud pour créer la relation · <kbd>Échap</kbd> pour annuler'; hint.classList.add('linking-mode'); }
+  const sourceEl = $('cn_' + id); if(sourceEl) sourceEl.classList.add('linking-source');
+  updateLinkPreview();
+}
+function cancelLinking(){
+  if(!linkState) return;
+  const sourceEl = $('cn_' + linkState.sourceId); if(sourceEl) sourceEl.classList.remove('linking-source');
+  document.querySelectorAll('.canvas-node.link-target').forEach(el=>el.classList.remove('link-target'));
+  document.body.classList.remove('linking');
+  const hint = $('modeHint');
+  if(hint){ hint.innerHTML = 'Glisse une carte pour la déplacer · clic droit pour Relier / Dupliquer / Supprimer · <kbd>Suppr</kbd> pour effacer le nœud sélectionné'; hint.classList.remove('linking-mode'); }
+  clearLinkPreview();
+  linkState = null;
+}
+function clearLinkPreview(){ const temp = $('temp-edge'); if(temp) temp.remove(); }
+function getBestRelationForPair(sourceId, targetId){
+  const sourceNode = nodes[sourceId]; const targetNode = nodes[targetId];
+  if(!sourceNode || !targetNode || !ontology) return null;
+  const options = getObjectPropsForPair(sourceNode.classId, targetNode.classId);
+  return options[0] || null;
+}
+function updateLinkPreview(){
+  const svg = $('edges-svg');
+  if(!linkState){ clearLinkPreview(); return; }
+  const src = getNodeCenter(linkState.sourceId);
+  const ptr = linkState.pointer ? linkState.pointer : src;
+  document.querySelectorAll('.canvas-node.link-target').forEach(el=>el.classList.remove('link-target'));
+  const hoveredId = getNodeIdFromPoint(ptr.x, ptr.y);
+  if(hoveredId && hoveredId !== linkState.sourceId){ const targetEl = $('cn_' + hoveredId); if(targetEl) targetEl.classList.add('link-target'); }
+  clearLinkPreview();
+  const dx = ptr.x - src.x, dy = ptr.y - src.y;
+  const dist = Math.sqrt(dx*dx+dy*dy) || 1;
+  const curve = Math.min(60, dist*0.18);
+  const perp = { x: -dy/dist*curve, y: dx/dist*curve };
+  const mx = (src.x+ptr.x)/2, my = (src.y+ptr.y)/2;
+  const cpx = mx+perp.x, cpy = my+perp.y;
+  const path = document.createElementNS('http://www.w3.org/2000/svg','path');
+  path.setAttribute('id','temp-edge');
+  path.setAttribute('class','temp-edge');
+  path.setAttribute('d', `M${src.x},${src.y} Q${cpx},${cpy} ${ptr.x},${ptr.y}`);
+  svg.appendChild(path);
+}
+function getNodeIdFromPoint(clientX, clientY){
+  const el = document.elementFromPoint(clientX, clientY)?.closest('.canvas-node');
+  return el ? el.id.replace('cn_','') : null;
+}
+function finishLinking(targetId){
+  if(!linkState) return;
+  const sourceId = linkState.sourceId;
+  if(targetId && targetId !== sourceId){
+    const prop = getBestRelationForPair(sourceId, targetId);
+    if(prop){ addEdge(sourceId, targetId, prop.id); }
+    else { openTripleEditorFor(sourceId); }
+  }
+  cancelLinking();
+}
+function startDragNode(e, id){
+  if(e.button !== 0) return;
+  e.preventDefault();
+  selectNode(id);
+  dragMoved = false;
+  const area = $('canvasArea'); const areaRect = area.getBoundingClientRect();
+  const node = nodes[id];
+  dragging = { nodeId:id, ox: e.clientX - areaRect.left + area.scrollLeft - node.x, oy: e.clientY - areaRect.top + area.scrollTop - node.y };
+}
+document.addEventListener('mousemove', (e)=>{
+  if(dragging){
+    dragMoved = true;
+    const area = $('canvasArea'); const areaRect = area.getBoundingClientRect();
+    const x = e.clientX - areaRect.left + area.scrollLeft - dragging.ox;
+    const y = e.clientY - areaRect.top + area.scrollTop - dragging.oy;
+    nodes[dragging.nodeId].x = x; nodes[dragging.nodeId].y = y;
+    const div = $('cn_' + dragging.nodeId);
+    if(div){ div.style.left = x+'px'; div.style.top = y+'px'; }
+    redrawEdges();
+    return;
+  }
+  if(linkState){
+    linkState.pointer = clientToCanvasPoint(e.clientX, e.clientY);
+    updateLinkPreview();
+  }
+});
+document.addEventListener('mouseup', (e)=>{
+  if(dragging){
+    dragging = null;
+    setTimeout(()=>{ dragMoved = false; }, 0);
+    return;
+  }
+  if(linkState){
+    const targetId = getNodeIdFromPoint(e.clientX, e.clientY);
+    finishLinking(targetId);
+  }
+});
+
+/* ═══════════════════ RELIER (route vers l'éditeur de triplets) ═══════════════════ */
+function openTripleEditorFor(id, propId){
+  if(!id) return;
+  populateTripleSubjectSelect();
+  $('tripleSubject').value = id;
+  onTripleSubjectChange();
+  if(propId){
+    const predSel = $('triplePredicate');
+    const wanted = 'obj||' + propId;
+    if([...predSel.options].some(o=>o.value===wanted)){
+      predSel.value = wanted;
+      onTriplePredicateChange();
+    }
+  }
+  const panel = document.querySelector('.triple-panel');
+  if(panel){
+    const panelRect = panel.getBoundingClientRect();
+    const shouldScroll = panelRect.top < 80 || panelRect.bottom > window.innerHeight - 40;
+    if(shouldScroll){
+      panel.scrollIntoView({behavior:'smooth', block:'start'});
+    }
+    panel.classList.add('flash');
+    setTimeout(()=>panel.classList.remove('flash'), 900);
+  }
+  setTimeout(()=>{
+    const predSel = $('triplePredicate');
+    if(predSel && predSel.value){
+      const objSel = $('tripleObjectNode');
+      if(objSel && objSel.style.display === 'block') objSel.focus();
+      else $('tripleObjectLiteral').focus();
+    } else {
+      predSel && predSel.focus();
+    }
+  }, 80);
+}
+function useRelation(id, propId){ openTripleEditorFor(id, propId); }
+function createRelationNodeFromProperty(sourceId, propId){
+  const prop = ontology.properties[propId];
+  const rangeClasses = [...prop.range];
+  if(rangeClasses.length === 1){
+    const targetId = createNodeAtDefaultPosition(rangeClasses[0]);
+    addEdge(sourceId, targetId, propId);
+    openTripleEditorFor(sourceId, propId);
+  } else {
+    openTripleEditorFor(sourceId, propId);
+  }
+}
+
+document.addEventListener('keydown', (e)=>{
+  if(e.key === 'Escape'){
+    if(linkState){ cancelLinking(); }
+    else if(selectedNodeId){ selectNode(null); }
+    return;
+  }
+  if((e.key === 'Delete' || e.key === 'Backspace') && selectedNodeId && !e.target.matches('input, textarea')){
+    e.preventDefault();
+    deleteNode(selectedNodeId);
+  }
+});
+$('canvasArea').addEventListener('click', (e)=>{
+  if(!e.target.closest('.canvas-node')){
+    if(linkState){ cancelLinking(); }
+    else { selectNode(null); }
+  }
+});
+document.addEventListener('click', (e)=>{
+  if(!e.target.closest('.context-menu')) hideContextMenu();
+});
+
+/* ═══════════════════ CONTEXT MENU ═══════════════════ */
+function showContextMenu(e, id){
+  contextNodeId = id;
+  selectNode(id);
+  const cm = $('contextMenu');
+  cm.style.left = e.clientX + 'px';
+  cm.style.top = e.clientY + 'px';
+  cm.classList.remove('hidden');
+}
+function hideContextMenu(){ $('contextMenu').classList.add('hidden'); }
+function startLinkFromContext(){ hideContextMenu(); if(contextNodeId) openTripleEditorFor(contextNodeId); }
+function duplicateFromContext(){ hideContextMenu(); if(contextNodeId) duplicateNode(contextNodeId); }
+function deleteFromContext(){ hideContextMenu(); if(contextNodeId) deleteNode(contextNodeId); }
+
+/* ═══════════════════ EDGES ═══════════════════ */
+function addEdge(fromId, toId, predicate){
+  const id = 'e' + (++edgeCounter);
+  edges.push({ id, from: fromId, to: toId, predicate });
+  redrawEdges(); updateStatus();
+  if(selectedNodeId) renderInspector(selectedNodeId);
+  updateTurtleLive();
+}
+function deleteEdge(id){
+  edges = edges.filter(e=>e.id !== id);
+  redrawEdges(); updateStatus();
+  if(selectedNodeId) renderInspector(selectedNodeId);
+  updateTurtleLive();
+}
+function getNodeCenter(id){
+  const el = $('cn_' + id); if(!el) return {x:0,y:0};
+  const area = $('canvasArea').getBoundingClientRect();
+  const r = el.getBoundingClientRect();
+  const scale = canvasZoom || 1;
+  return { x: (r.left - area.left + $('canvasArea').scrollLeft + r.width/2) / scale, y: (r.top - area.top + $('canvasArea').scrollTop + r.height/2) / scale };
+}
+function redrawEdges(){
+  const svg = $('edges-svg');
+  Array.from(svg.children).forEach(c=>{ if(c.id !== 'temp-edge' && c.tagName !== 'defs') c.remove(); });
+  edges.forEach(edge=>{
+    const src = getNodeCenter(edge.from), tgt = getNodeCenter(edge.to);
+    const dx = tgt.x - src.x, dy = tgt.y - src.y;
+    const mx = (src.x+tgt.x)/2, my = (src.y+tgt.y)/2;
+    const dist = Math.sqrt(dx*dx+dy*dy) || 1;
+    const curve = Math.min(50, dist*0.2);
+    const perp = { x: -dy/dist*curve, y: dx/dist*curve };
+    const cpx = mx+perp.x, cpy = my+perp.y;
+
+    const path = document.createElementNS('http://www.w3.org/2000/svg','path');
+    path.setAttribute('class','edge-path');
+    path.setAttribute('d', `M${src.x},${src.y} Q${cpx},${cpy} ${tgt.x},${tgt.y}`);
+    path.setAttribute('marker-end','url(#arrow)');
+    path.addEventListener('click', ()=>{ if(confirm(`Supprimer la relation "${propLabel(edge.predicate)}" ?`)) deleteEdge(edge.id); });
+    svg.appendChild(path);
+
+    const label = propLabel(edge.predicate);
+    const textW = Math.min(label.length*5.4, 190);
+    const bg = document.createElementNS('http://www.w3.org/2000/svg','rect');
+    bg.setAttribute('x', cpx-textW/2-3); bg.setAttribute('y', cpy-9);
+    bg.setAttribute('width', textW+6); bg.setAttribute('height', 14);
+    bg.setAttribute('rx','3'); bg.setAttribute('class','edge-label-bg'); bg.setAttribute('opacity','0.9');
+    svg.appendChild(bg);
+    const txt = document.createElementNS('http://www.w3.org/2000/svg','text');
+    txt.setAttribute('x', cpx); txt.setAttribute('y', cpy+2); txt.setAttribute('class','edge-label-text');
+    txt.textContent = label.length>32 ? label.slice(0,30)+'…' : label;
+    svg.appendChild(txt);
+  });
+}
+
+/* ═══════════════════ SELECTION / INSPECTOR ═══════════════════ */
+function selectNode(id){
+  Object.keys(nodes).forEach(nid=>{ const el = $('cn_' + nid); if(el) el.classList.remove('selected'); });
+  selectedNodeId = id;
+  if(id) markSelected(id);
+  renderInspector(id);
+}
+function markSelected(id){ const el = $('cn_' + id); if(el) el.classList.add('selected'); }
+
+function renderInspector(id){
+  const body = $('inspectorBody');
+  if(!id || !nodes[id]){
+    body.innerHTML = `<div class="empty-inspector"><div class="empty-inspector-icon">⬡</div>
+      <div class="empty-inspector-text">Sélectionne un nœud pour voir ses connexions et actions</div></div>`;
+    return;
+  }
+  const node = nodes[id]; const et = getEntityType(node.classId);
+  const nodeEdges = edges.filter(e=>e.from===id || e.to===id);
+  const connHTML = nodeEdges.length ? nodeEdges.map(e=>{
+    const other = e.from===id ? e.to : e.from;
+    const dir = e.from===id ? '→' : '←';
+    const oet = getEntityType(nodes[other]?.classId);
+    return `<div class="conn-item">
+      <div class="conn-dot" style="background:${oet.color}"></div>
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${dir} ${nodes[other]?nodes[other].name:'?'}</div>
+        <div class="conn-label">${propLabel(e.predicate)}</div>
+      </div>
+      <div class="conn-del" onclick="deleteEdge('${e.id}')">✕</div>
+    </div>`;
+  }).join('') : '<div style="font-size:10px;color:var(--muted);">Aucune connexion</div>';
+
+  const outgoing = getOutgoingRelationOptions(node.classId);
+  const outgoingHTML = outgoing.length ? outgoing.map(o=>`
+    <div class="rel-row">
+      <div class="rel-txt">
+        <span class="badge">${o.label}</span>
+        <div class="rel-target">→ ${o.targets.length ? o.targets.join(', ') : '(classe non restreinte)'}</div>
+      </div>
+      <div style="display:flex;gap:6px;">
+        <button class="btn small" style="padding:3px 7px;" onclick="useRelation('${id}','${o.id}')">Utiliser</button>
+        ${o.targets.length===1 ? `<button class="btn small" style="padding:3px 7px;" onclick="createRelationNodeFromProperty('${id}','${o.id}')">Créer</button>` : ''}
+      </div>
+    </div>`).join('') : '<div style="font-size:10px;color:var(--muted);">Aucune propriété-objet ne part de cette classe.</div>';
+
+  body.innerHTML = `
+    <div class="inspector-section">
+      <div class="inspector-section-title" style="color:${et.color === '#f5e27a' ? '#8a6d00' : et.color}">${et.label}</div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:4px;">${node.name}</div>
+      <div style="font-size:9.5px;color:var(--muted);">${Object.keys(node.attrs).length} attribut(s)</div>
+    </div>
+    <div class="inspector-section">
+      <div class="inspector-section-title">Relations possibles depuis ${et.label}</div>
+      ${outgoingHTML}
+    </div>
+    <div class="inspector-section">
+      <div class="inspector-section-title">Connexions</div>
+      ${connHTML}
+      <button class="btn" style="margin-top:8px;width:100%;" onclick="openTripleEditorFor('${id}')">+ Ajouter une relation</button>
+    </div>
+    <div class="inspector-section">
+      <div class="inspector-section-title">Actions</div>
+      <button class="btn" style="width:100%;margin-bottom:6px;" onclick="duplicateNode('${id}')">⧉ Dupliquer</button>
+      <button class="btn" style="width:100%;color:var(--bad);border-color:var(--bad);" onclick="deleteNode('${id}')">✕ Supprimer le nœud</button>
+    </div>
+  `;
+}
+
+/* ═══════════════════ DELETE / DUPLICATE ═══════════════════ */
+function deleteNode(id){
+  edges = edges.filter(e=>e.from!==id && e.to!==id);
+  delete nodes[id];
+  const el = $('cn_' + id); if(el) el.remove();
+  if(selectedNodeId === id){ selectedNodeId = null; renderInspector(null); }
+  redrawEdges(); updateDropHint(); updateStatus();
+  refreshAll();
+}
+function duplicateNode(id){
+  if(!nodes[id]) return;
+  const n = nodes[id];
+  const newId = createNode(n.classId, n.x+30, n.y+30);
+  nodes[newId].attrs = {...n.attrs};
+  nodes[newId].name = n.name + '_copie';
+  renderNode(newId);
+  selectNode(newId);
+  refreshAll();
+}
+
+/* ═══════════════════ STATUS / MISC ═══════════════════ */
+function updateDropHint(){
+  const hint = $('dropHint');
+  if(Object.keys(nodes).length>0) hint.classList.add('hidden'); else hint.classList.remove('hidden');
+}
+function updateStatus(){
+  $('statusNodes').textContent = Object.keys(nodes).length + ' nœud(s)';
+  $('statusEdges').textContent = edges.length + ' relation(s)';
+}
+function clearCanvas(){
+  if(!confirm('Effacer tous les nœuds et relations ?')) return;
+  Object.keys(nodes).forEach(id=>{ const el = $('cn_' + id); if(el) el.remove(); });
+  nodes = {}; edges = [];
+  $('edges-svg').querySelectorAll(':scope > *:not(defs)').forEach(e=>e.remove());
+  selectedNodeId = null; renderInspector(null); updateDropHint(); updateStatus();
+  refreshAll();
+}
+
+/* ═══════════════════ TRIPLE EDITOR ═══════════════════ */
+function refreshAll(){
+  updateStatus();
+  populateTripleSubjectSelect();
+  updateTurtleLive();
+}
+function populateTripleSubjectSelect(){
+  const sel = $('tripleSubject');
+  const prevVal = sel.value;
+  sel.innerHTML = '<option value="">— choisir un nœud —</option>';
+  Object.values(nodes)
+    .sort((a,b)=>a.name.localeCompare(b.name))
+    .forEach(n=>{
+      const opt = document.createElement('option');
+      opt.value = n.id; opt.textContent = `${n.name}  (${classLabel(n.classId)})`;
+      sel.appendChild(opt);
+    });
+  if([...sel.options].some(o=>o.value===prevVal)){ sel.value = prevVal; }
+  onTripleSubjectChange();
+}
+function normalizeOntologyId(id){
+  if(!id || !ontology) return id;
+  if(ontology.classes[id] || ontology.properties[id]) return id;
+  const local = localName(id);
+  const match = Object.keys(ontology.classes).find(k=>localName(k)===local || k===local);
+  return match || id;
+}
+function getClassAncestorSet(classId){
+  const resolved = normalizeOntologyId(classId);
+  if(!resolved || !ontology || !ontology.classes[resolved]) return new Set([classId]);
+  return ancestors(resolved, ontology.classes);
+}
+function propertyDomainMatches(prop, classId){
+  if(!prop || !classId) return false;
+  if(prop.domain.size===0) return true;
+  const anc = getClassAncestorSet(classId);
+  return [...prop.domain].some(d=>anc.has(normalizeOntologyId(d)));
+}
+function propertyRangeMatches(prop, classId){
+  if(!prop || !classId) return false;
+  if(prop.range.size===0) return true;
+  const anc = getClassAncestorSet(classId);
+  return [...prop.range].some(d=>anc.has(normalizeOntologyId(d)));
+}
+function nodeMatchesRange(node, prop){
+  if(!prop || !node) return false;
+  return propertyRangeMatches(prop, node.classId);
+}
+function onTripleSubjectChange(){
+  const subjId = $('tripleSubject').value;
+  const predSel = $('triplePredicate');
+  const prevPredVal = predSel.value;
+  predSel.innerHTML = '';
+  if(!subjId || !ontology){
+    predSel.innerHTML = '<option value="">— choisir un sujet ci-dessus —</option>';
+    predSel.disabled = true;
+    resetTripleObject();
+    return;
+  }
+  predSel.disabled = false;
+  predSel.innerHTML = '<option value="">— choisir —</option>';
+  const node = nodes[subjId];
+  const objProps = getOutgoingRelationOptions(node.classId);
+  const dataProps = getDatatypePropsForClass(node.classId);
+  if(objProps.length){
+    const og = document.createElement('optgroup'); og.label = 'Propriétés-objets (→ un nœud existant)';
+    objProps.forEach(p=>{
+      const o = document.createElement('option');
+      o.value = 'obj||' + p.id;
+      o.textContent = p.label + (p.targets.length ? ' → ' + p.targets.join(', ') : '');
+      og.appendChild(o);
+    });
+    predSel.appendChild(og);
+  }
+  if(dataProps.length){
+    const dg = document.createElement('optgroup'); dg.label = 'Propriétés-attributs (→ une valeur littérale)';
+    dataProps.forEach(p=>{
+      const o = document.createElement('option');
+      o.value = 'data||' + p.id;
+      o.textContent = p.label;
+      dg.appendChild(o);
+    });
+    predSel.appendChild(dg);
+  }
+  if(!objProps.length && !dataProps.length){
+    predSel.innerHTML = '<option value="">(aucune propriété connue pour cette classe)</option>';
+  }
+  if([...predSel.options].some(o=>o.value===prevPredVal)){ predSel.value = prevPredVal; }
+  onTriplePredicateChange();
+}
+function onTriplePredicateChange(){
+  const val = $('triplePredicate').value;
+  const objSel = $('tripleObjectNode'), objLit = $('tripleObjectLiteral'), ctxHint = $('tripleContextHint');
+  hideTripleWarn();
+  if(!val){ objSel.style.display='none'; objLit.style.display='none'; ctxHint.innerHTML=''; return; }
+  const [kind, propId] = val.split('||');
+  if(kind === 'obj'){
+    objLit.style.display = 'none';
+    objSel.style.display = 'block';
+    objSel.innerHTML = '<option value="">— choisir un nœud cible —</option>';
+    const prop = ontology.properties[propId];
+    const subjId = $('tripleSubject').value;
+    let count = 0;
+    Object.values(nodes).forEach(n=>{
+      if(n.id === subjId) return;
+      if(nodeMatchesRange(n, prop)){
+        const o = document.createElement('option');
+        o.value = n.id; o.textContent = `${n.name}  (${classLabel(n.classId)})`;
+        objSel.appendChild(o); count++;
+      }
+    });
+    const rangeClasses = [...(prop.range || [])];
+    if(rangeClasses.length){
+      const og = document.createElement('optgroup'); og.label = 'Créer un nouveau nœud';
+      rangeClasses.forEach(cid=>{
+        const o = document.createElement('option');
+        o.value = 'new||' + cid;
+        o.textContent = '➕ Créer un nouveau ' + classLabel(cid);
+        og.appendChild(o);
+      });
+      objSel.appendChild(og);
+    }
+    const domainText = prop.domain.size ? [...prop.domain].map(classLabel).join(', ') : 'toute classe';
+    const rangeText = prop.range.size ? [...prop.range].map(classLabel).join(', ') : 'n’importe quelle classe';
+    ctxHint.innerHTML = `<strong>${propLabel(propId)}</strong> · domaine : ${domainText} · portée : ${rangeText}`;
+    if(count === 0 && rangeClasses.length === 0){
+      showTripleWarn('Aucun nœud compatible sur le canevas, et cette propriété n’a pas de portée déclarée — crée un nœud de la bonne classe via la palette de gauche.');
+    } else if(count === 0){
+      showTripleWarn('Aucun nœud compatible n’existe encore — choisis « Créer un nouveau … » ci-dessous pour en générer un directement.');
+    }
+  } else {
+    objSel.style.display = 'none';
+    objLit.style.display = 'block';
+    objLit.value = '';
+    const prop = ontology.properties[propId];
+    const domainText = prop.domain.size ? [...prop.domain].map(classLabel).join(', ') : 'toute classe';
+    const rangeText = prop.range.size ? [...prop.range].map(classLabel).join(', ') : 'valeur littérale';
+    ctxHint.innerHTML = `<strong>${propLabel(propId)}</strong> · domaine : ${domainText} · portée : ${rangeText}`;
+  }
+}
+function resetTripleObject(){
+  $('tripleObjectNode').style.display = 'none';
+  $('tripleObjectLiteral').style.display = 'none';
+}
+function addTripleFromForm(){
+  const subjId = $('tripleSubject').value;
+  const predVal = $('triplePredicate').value;
+  if(!subjId){ showTripleWarn('Choisis un sujet.'); return; }
+  if(!predVal){ showTripleWarn('Choisis un prédicat.'); return; }
+  const [kind, propId] = predVal.split('||');
+  if(kind === 'obj'){
+    let objId = $('tripleObjectNode').value;
+    if(!objId){ showTripleWarn('Choisis un nœud cible.'); return; }
+    if(objId.startsWith('new||')){
+      const newClassId = objId.slice(5);
+      objId = createNodeAtDefaultPosition(newClassId);
+    }
+    addEdge(subjId, objId, propId);
+  } else {
+    const val = $('tripleObjectLiteral').value.trim();
+    if(!val){ showTripleWarn('Entre une valeur.'); return; }
+    nodes[subjId].attrs[propId] = val;
+    renderNode(subjId);
+    if(selectedNodeId === subjId) markSelected(subjId);
+    refreshAll();
+  }
+  hideTripleWarn();
+  $('tripleObjectLiteral').value = '';
+}
+function showTripleWarn(msg){ const w = $('tripleWarn'); w.textContent = msg; w.style.display = 'block'; }
+function hideTripleWarn(){ $('tripleWarn').style.display = 'none'; }
+
+/* ═══════════════════ EXPORT ═══════════════════ */
+function exportJSON(){
+  const data = {
+    nodes: Object.values(nodes).map(n=>({ id:n.id, class: n.classId, label: classLabel(n.classId), name: n.name, attrs: n.attrs })),
+    edges: edges.map(e=>({ from: nodes[e.from]?.name, to: nodes[e.to]?.name, predicate: e.predicate }))
+  };
+  download(JSON.stringify(data, null, 2), 'instances.json', 'application/json');
+}
+
+function turtleEscape(s){ return String(s).replace(/\\/g,'\\\\').replace(/"/g,'\\"'); }
+
+function generateTurtle(){
+  const prefix = $('instPrefix').value.trim() || 'inst';
+  const base = $('instBase').value.trim() || 'https://example.org/instances#';
+  const usedPrefixes = new Set();
+  function reg(id){ if(id && id.includes(':')) usedPrefixes.add(id.split(':')[0]); }
+
+  const body = [];
+  Object.values(nodes).forEach(n=>{
+    reg(n.classId);
+    const parts = [`a ${n.classId || '<no-class>'}`];
+    Object.entries(n.attrs).forEach(([propId, value])=>{ reg(propId); parts.push(`${propId} "${turtleEscape(value)}"`); });
+    edges.filter(e=>e.from===n.id).forEach(e=>{
+      reg(e.predicate);
+      const t = nodes[e.to];
+      parts.push(`${e.predicate} ${prefix}:${t ? t.name : '?'}`);
+    });
+    const subj = `${prefix}:${n.name} `;
+    body.push(subj + parts.join(' ;\n' + ' '.repeat(subj.length)) + ' .');
+  });
+
+  const lines = [];
+  if(ontology){
+    for(const p of usedPrefixes){ if(ontology.prefixMap[p]) lines.push(`@prefix ${p}: <${ontology.prefixMap[p]}> .`); }
+  }
+  lines.push(`@prefix ${prefix}: <${base}> .`);
+  lines.push('');
+  lines.push(...body);
+  return lines.join('\n');
+}
+
+function openTurtlePreview(){ updateTurtleLive(); }
+function updateTurtlePreview(){ updateTurtleLive(); }
+function updateTurtleLive(){ if(turtleManualEdit) return; $('turtleLive').value = generateTurtle(); }
+function onTurtleManualEdit(){
+  turtleManualEdit = true;
+  const note = $('turtleSyncNote');
+  if(note) note.style.display = 'block';
+}
+function resyncTurtle(){
+  turtleManualEdit = false;
+  const note = $('turtleSyncNote');
+  if(note) note.style.display = 'none';
+  updateTurtleLive();
+}
+function copyTurtle(){
+  const ta = $('turtleLive');
+  ta.select();
+  try{
+    if(navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(ta.value); }
+    else { document.execCommand('copy'); }
+  }catch(err){
+    try{ document.execCommand('copy'); }catch(err2){ alert("Impossible de copier automatiquement — sélectionne le texte manuellement (Ctrl/Cmd+C)."); }
+  }
+}
+function downloadTurtle(){
+  updateTurtleLive();
+  download($('turtleLive').value, 'instances.ttl', 'text/turtle');
+}
+function download(content, filename, mime){
+  try{
+    const blob = new Blob([content], {type:mime});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename; a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(()=>{ document.body.removeChild(a); URL.revokeObjectURL(url); }, 400);
+  }catch(err){
+    try{
+      const w = window.open('', '_blank');
+      if(w){
+        const esc = String(content).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+        w.document.write(`<title>${filename}</title><pre style="white-space:pre-wrap;font-family:monospace;padding:16px;">${esc}</pre>`);
+      } else {
+        alert("Le téléchargement est bloqué dans cet environnement. Utilise le bouton Copier, puis colle le contenu dans un fichier " + filename + ".");
+      }
+    }catch(err2){
+      alert("Le téléchargement est bloqué dans cet environnement. Utilise le bouton Copier, puis colle le contenu dans un fichier " + filename + ".");
+    }
+  }
+}
+
+/* ═══════════════════ IMPORT D'INSTANCES TURTLE (boîte éditable) ═══════════════════ */
+function importTurtleInstances(){
+  const text = $('turtleLive').value;
+  if(!text.trim()){ alert('La boîte Turtle est vide.'); return; }
+  let prefixMap, triples;
+  try{
+    prefixMap = {};
+    const prefixRegex = /@prefix\s+([\w-]*):\s*<([^>]+)>\s*\./gi; let m;
+    while((m = prefixRegex.exec(text))){ prefixMap[m[1]] = m[2]; }
+    const statements = splitStatements(text);
+    triples = [];
+    for(const stmt of statements){
+      if(/^@prefix/i.test(stmt) || /^@base/i.test(stmt) || /^PREFIX/i.test(stmt) || /^BASE/i.test(stmt)) continue;
+      const tokens = tokenize(stmt);
+      const stmtTriples = parseStatementTokens(tokens);
+      if(!stmtTriples) continue;
+      for(let [s,p,o] of stmtTriples){
+        s = shorten(s, prefixMap);
+        const pShort = p === 'a' ? 'a' : shorten(p, prefixMap);
+        const oShort = shorten(o, prefixMap);
+        triples.push([s, pShort, oShort]);
+      }
+    }
+  }catch(err){ alert('Erreur de lecture du Turtle : ' + err.message); return; }
+
+  const subjToNodeId = {};
+  Object.values(nodes).forEach(n=>{ if(n.originCurie) subjToNodeId[n.originCurie] = n.id; });
+
+  function ensureNodeFor(curie){
+    if(subjToNodeId[curie]) return subjToNodeId[curie];
+    const short = curie.includes(':') ? curie.split(':').slice(1).join(':') : curie;
+    const id = createNodeAtDefaultPosition(null);
+    nodes[id].name = short || curie;
+    nodes[id].originCurie = curie;
+    subjToNodeId[curie] = id;
+    return id;
+  }
+
+  let createdCount = 0, edgeCount = 0, attrCount = 0;
+  // Pass 1: types
+  triples.forEach(([s,p,o])=>{
+    const isType = p === 'a' || localName(p).toLowerCase() === 'type';
+    if(isType){
+      const before = Object.keys(subjToNodeId).length;
+      const nid = ensureNodeFor(s);
+      if(Object.keys(subjToNodeId).length > before) createdCount++;
+      nodes[nid].classId = o;
+    }
+  });
+  // Pass 2: everything else
+  triples.forEach(([s,p,o])=>{
+    const isType = p === 'a' || localName(p).toLowerCase() === 'type';
+    if(isType) return;
+    const before = Object.keys(subjToNodeId).length;
+    const nid = ensureNodeFor(s);
+    if(Object.keys(subjToNodeId).length > before) createdCount++;
+    if(o.startsWith('"')){
+      nodes[nid].attrs[p] = literalText(o);
+      attrCount++;
+    } else {
+      const before2 = Object.keys(subjToNodeId).length;
+      const tid = ensureNodeFor(o);
+      if(Object.keys(subjToNodeId).length > before2) createdCount++;
+      const already = edges.some(e=>e.from===nid && e.to===tid && e.predicate===p);
+      if(!already){ edges.push({id:'e'+(++edgeCounter), from:nid, to:tid, predicate:p}); edgeCount++; }
+    }
+  });
+
+  Object.values(nodes).forEach(n=>renderNode(n.id));
+  redrawEdges();
+  turtleManualEdit = false;
+  const note = $('turtleSyncNote');
+  if(note) note.style.display = 'none';
+  refreshAll();
+  alert(`Import terminé : ${createdCount} nœud(s) créé(s) ou retrouvé(s), ${edgeCount} relation(s), ${attrCount} attribut(s).`);
+}
+
+updateDropHint();
+updateStatus();
+refreshAll();
+</script>
+</body>
+</html>
