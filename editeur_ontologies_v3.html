@@ -97,8 +97,18 @@
   #edges-svg{ position:absolute; inset:0; width:100%; height:100%; pointer-events:none; z-index:5; overflow:visible; }
   .edge-path{ fill:none; stroke:var(--border-light); stroke-width:1.6; pointer-events:stroke; cursor:pointer; }
   .edge-path:hover{ stroke:var(--accent); }
+  .edge-path.edge-conflict{ stroke:var(--warn); stroke-width:2; stroke-dasharray:5 3; }
   .edge-label-bg{ fill:var(--bg); }
   .edge-label-text{ font-size:9px; fill:var(--muted); text-anchor:middle; font-family:'DM Mono',monospace; }
+  .edge-label-text.edge-conflict-text{ fill:#8a6d00; font-weight:600; }
+
+  /* CONFLICTS */
+  #statusConflicts{ color:#8a6d00; font-weight:600; cursor:pointer; }
+  .attr-row-wrap.attr-conflict .attr-value-input{ border-color:var(--warn); background:#FFF8E6; }
+  .attr-conflict-note{ font-size:9px; color:#8a6d00; margin:2px 0 4px 2px; display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+  .attr-conflict-note button{ font-size:9px; padding:1px 6px; border-radius:4px; border:1px solid var(--border); background:#fff; cursor:pointer; }
+  .conn-item.conn-conflict{ background:#FFF8E6; border-radius:4px; padding-left:4px; }
+  .conn-item.conn-conflict .conn-label::after{ content:' ⚠ conflit'; color:#8a6d00; }
   .temp-edge{ stroke:var(--warn); stroke-dasharray:5 3; stroke-width:1.6; }
 
   .drop-hint{ position:absolute; inset:0; display:flex; flex-direction:column; align-items:center;
@@ -258,6 +268,7 @@
   <div class="header-sep"></div>
   <div class="header-info" id="headerInfo">Aucune ontologie chargée</div>
   <div class="header-actions">
+    <button class="btn" onclick="openSettingsModal()">⚙ Réglages</button>
     <button class="btn" onclick="clearCanvas()">↺ Effacer</button>
     <button class="btn" onclick="exportJSON()">⬇ JSON</button>
     <button class="btn btn-primary" onclick="downloadTurtle()">⬇ Turtle (.ttl)</button>
@@ -344,11 +355,48 @@
 
 </div>
 
+<!-- MODAL DE RÉGLAGES -->
+<div class="modal-overlay hidden" id="settingsModalOverlay">
+  <div class="modal" style="width:440px;">
+    <div class="modal-title">⚙ Réglages</div>
+    <div class="modal-field">
+      <label>Propriétés à valeur unique (déclarées localement, en plus de celles de l'ontologie)</label>
+      <div class="modal-note" style="margin-top:-2px;">CIDOC-CRM ne déclare pas de <code>owl:FunctionalProperty</code> dans son RDFS officiel, par choix du SIG. Ajoute ici, pour ton projet, les propriétés que tu traites comme à valeur unique (ex. <code>P4_has_time-span</code>), même si l'ontologie chargée ne le formalise pas. Un conflit bloquant se déclenchera dès qu'une seconde valeur est ajoutée pour une de ces propriétés.</div>
+      <div class="row" style="margin-top:8px;">
+        <input type="text" id="manualFunctionalInput" placeholder="ex. P4_has_time-span" style="flex:1;min-width:0;" onkeydown="if(event.key==='Enter') addManualFunctionalProperty()">
+        <button class="btn" onclick="addManualFunctionalProperty()">+ Ajouter</button>
+      </div>
+      <div id="manualFunctionalList" style="font-size:10px;margin-top:8px;"></div>
+    </div>
+    <div class="modal-actions"><button class="btn" onclick="closeSettingsModal()">Fermer</button></div>
+  </div>
+</div>
+
 <div class="statusbar">
   <div class="status-dot"></div>
   <span id="statusOnto">Aucune ontologie</span>
   <span id="statusNodes">0 nœud</span>
   <span id="statusEdges">0 relation(s)</span>
+  <span id="statusConflicts" style="display:none;" onclick="openConflictPanel()"></span>
+</div>
+
+<!-- MODAL DE RÉSOLUTION DE CONFLIT -->
+<div class="modal-overlay hidden" id="conflictModalOverlay">
+  <div class="modal">
+    <div class="modal-title">⚠ Conflit détecté</div>
+    <div class="modal-note" id="conflictModalBody"></div>
+    <div class="modal-actions" id="conflictModalActions"></div>
+  </div>
+</div>
+
+<!-- PANNEAU DE REVUE DES CONFLITS -->
+<div class="modal-overlay hidden" id="conflictPanelOverlay">
+  <div class="modal" style="width:480px;">
+    <div class="modal-title">Conflits non résolus</div>
+    <div class="modal-note" style="margin-bottom:10px;">Ces propriétés sont déclarées à valeur unique (dans l'ontologie chargée ou dans tes contraintes locales), mais deux valeurs ont été conservées volontairement. Choisis laquelle retenir, ou laisse les deux comme trace documentée de l'ambiguïté.</div>
+    <div id="conflictPanelBody" style="max-height:360px;overflow-y:auto;"></div>
+    <div class="modal-actions"><button class="btn" onclick="closeConflictPanel()">Fermer</button></div>
+  </div>
 </div>
 
 <div class="drag-ghost hidden" id="dragGhost"></div>
@@ -491,7 +539,7 @@ function buildOntologyFromRdfXml(text){
   if(parserErrors.length) throw new Error('Fichier RDF/XML invalide');
   const classes={}, properties={}, labelMap={}, commentMap={};
   function ensureClass(id){ if(!classes[id]) classes[id]={id,supers:new Set()}; return classes[id]; }
-  function ensureProperty(id){ if(!properties[id]) properties[id]={id,domain:new Set(),range:new Set(),type:'unknown'}; return properties[id]; }
+  function ensureProperty(id){ if(!properties[id]) properties[id]={id,domain:new Set(),range:new Set(),type:'unknown',functional:false}; return properties[id]; }
   function addLabel(id, val){ if(val && !labelMap[id]) labelMap[id]=val; }
   function addComment(id, val){ if(val && !commentMap[id]) commentMap[id]=val; }
   function nodeName(el){ return (el.nodeName || '').split(':').pop(); }
@@ -523,7 +571,10 @@ function buildOntologyFromRdfXml(text){
         else if(childTag === 'range' && resource){ ensureProperty(subject).range.add(resource); }
         else if(childTag === 'label'){ addLabel(subject, elementText(child)); }
         else if(childTag === 'comment'){ addComment(subject, elementText(child)); }
+        else if(childTag === 'type' && resource && resource.toLowerCase().endsWith('functionalproperty')){ ensureProperty(subject).functional = true; }
       });
+    } else if(tag === 'functionalproperty'){
+      ensureProperty(subject).functional = true;
     }
   });
   return {prefixMap:{}, classes, properties, labelMap, commentMap};
@@ -533,7 +584,7 @@ function buildOntology(text){
   const statements=splitStatements(text);
   const classes={}, properties={}, labelMap={}, commentMap={};
   function ensureClass(id){ if(!classes[id]) classes[id]={id,supers:new Set()}; return classes[id]; }
-  function ensureProperty(id){ if(!properties[id]) properties[id]={id,domain:new Set(),range:new Set(),type:'unknown'}; return properties[id]; }
+  function ensureProperty(id){ if(!properties[id]) properties[id]={id,domain:new Set(),range:new Set(),type:'unknown',functional:false}; return properties[id]; }
   function normalizeTerm(term){
     if(!term) return term;
     return shorten(term, prefixMap);
@@ -568,6 +619,7 @@ function buildOntology(text){
         if(classified === 'class') ensureClass(subjectId);
         else if(classified === 'objectproperty' || classified === 'datatypeproperty' || classified === 'property') ensureProperty(subjectId);
         else if(isResourceToken(o)) ensureClass(subjectId);
+        if(localName(objShort).toLowerCase() === 'functionalproperty') ensureProperty(subjectId).functional = true;
       } else if(predLocal==='subclassof'){ ensureClass(subjectId).supers.add(objShort); ensureClass(objShort); }
       else if(predLocal==='domain'){ ensureProperty(subjectId).domain.add(objShort); }
       else if(predLocal==='range'){ ensureProperty(subjectId).range.add(objShort); }
@@ -720,10 +772,11 @@ function mergeOntologyInto(target, addition){
     for(const s of cls.supers) target.classes[id].supers.add(s);
   }
   for(const [id, prop] of Object.entries(addition.properties)){
-    if(!target.properties[id]) target.properties[id] = {id, domain:new Set(), range:new Set(), type:'unknown'};
+    if(!target.properties[id]) target.properties[id] = {id, domain:new Set(), range:new Set(), type:'unknown', functional:false};
     for(const d of prop.domain) target.properties[id].domain.add(d);
     for(const r of prop.range) target.properties[id].range.add(r);
     if(prop.type !== 'unknown') target.properties[id].type = prop.type;
+    if(prop.functional) target.properties[id].functional = true;
   }
   for(const [id, label] of Object.entries(addition.labelMap)){ if(!target.labelMap[id]) target.labelMap[id] = label; }
   for(const [id, c] of Object.entries(addition.commentMap)){ if(!target.commentMap[id]) target.commentMap[id] = c; }
@@ -964,14 +1017,21 @@ function renderNode(id){
   div.className = 'canvas-node'; div.id = 'cn_' + id;
   div.style.left = node.x + 'px'; div.style.top = node.y + 'px';
 
-  const attrRows = Object.entries(node.attrs).map(([propId, value])=>`
-    <div class="attr-row-wrap">
+  const attrRows = Object.entries(node.attrs).map(([propId, value])=>{
+    const conflicts = (node.attrConflicts && node.attrConflicts[propId]) || [];
+    const conflictNote = conflicts.length ? `<div class="attr-conflict-note">⚠ ${conflicts.length} valeur(s) en attente : ${
+      conflicts.map((v,i)=>`« ${v} » <button onclick="promoteAttrConflict('${id}','${propId}',${i})">utiliser</button> <button onclick="dismissAttrConflict('${id}','${propId}',${i})">écarter</button>`).join(' · ')
+    }</div>` : '';
+    return `
+    <div class="attr-row-wrap${conflicts.length ? ' attr-conflict' : ''}">
       <div class="k">${propLabel(propId)}</div>
       <div class="attr-row">
         <input class="attr-value-input" value="${(value||'').replace(/"/g,'&quot;')}" onchange="setAttr('${id}','${propId}',this.value)">
         <button class="attr-del" onclick="removeAttr('${id}','${propId}')">✕</button>
       </div>
-    </div>`).join('');
+      ${conflictNote}
+    </div>`;
+  }).join('');
 
   div.innerHTML = `
     <div class="node-header">
@@ -1006,8 +1066,66 @@ function renderNode(id){
   $('canvasNodes').appendChild(div);
 }
 function renameNode(id, value){ nodes[id].name = value || nodes[id].name; redrawEdges(); refreshAll(); }
-function setAttr(id, propId, value){ nodes[id].attrs[propId] = value; updateTurtleLive(); }
-function removeAttr(id, propId){ delete nodes[id].attrs[propId]; renderNode(id); if(selectedNodeId===id) markSelected(id); refreshAll(); }
+function setAttr(id, propId, value){
+  // édition directe d'une valeur déjà affichée : correction assumée, pas de conflit
+  nodes[id].attrs[propId] = value;
+  updateTurtleLive();
+}
+function removeAttr(id, propId){
+  delete nodes[id].attrs[propId];
+  if(nodes[id].attrConflicts) delete nodes[id].attrConflicts[propId];
+  renderNode(id); if(selectedNodeId===id) markSelected(id); refreshAll();
+}
+function addAttrChecked(nodeId, propId, value){
+  const node = nodes[nodeId];
+  const existing = node.attrs[propId];
+  if(existing !== undefined && existing !== value){
+    if(!isFunctionalProperty(propId)){
+      // propriété multi-valuée par nature (non déclarée fonctionnelle) : on
+      // ne bloque pas, mais un attribut ne porte qu'une valeur dans ce modèle,
+      // donc on prévient avant d'écraser plutôt que de le faire en silence.
+      if(!confirm(`« ${propLabel(propId)} » a déjà la valeur « ${existing} ».\nLa remplacer par « ${value} » ?\n\n(Cette propriété n'est pas déclarée à valeur unique dans l'ontologie chargée : ce n'est pas un conflit bloquant, juste une confirmation d'écrasement.)`)) return;
+      node.attrs[propId] = value;
+      afterAttrChange(nodeId);
+      return;
+    }
+    openConflictModal({
+      kind:'attr', nodeId, propId, oldValue: existing, newValue: value,
+      onReplace: ()=>{ node.attrs[propId] = value; afterAttrChange(nodeId); },
+      onKeepBoth: ()=>{
+        node.attrConflicts = node.attrConflicts || {};
+        (node.attrConflicts[propId] = node.attrConflicts[propId] || []).push(value);
+        afterAttrChange(nodeId);
+      }
+    });
+    return;
+  }
+  node.attrs[propId] = value;
+  afterAttrChange(nodeId);
+}
+function afterAttrChange(nodeId){
+  renderNode(nodeId);
+  if(selectedNodeId === nodeId) markSelected(nodeId);
+  updateStatus();
+  refreshAll();
+}
+function promoteAttrConflict(nodeId, propId, index){
+  const node = nodes[nodeId];
+  if(!node.attrConflicts || !node.attrConflicts[propId]) return;
+  const [chosen] = node.attrConflicts[propId].splice(index, 1);
+  const previous = node.attrs[propId];
+  node.attrs[propId] = chosen;
+  if(previous !== undefined) node.attrConflicts[propId].push(previous);
+  if(node.attrConflicts[propId].length === 0) delete node.attrConflicts[propId];
+  afterAttrChange(nodeId);
+}
+function dismissAttrConflict(nodeId, propId, index){
+  const node = nodes[nodeId];
+  if(!node.attrConflicts || !node.attrConflicts[propId]) return;
+  node.attrConflicts[propId].splice(index, 1);
+  if(node.attrConflicts[propId].length === 0) delete node.attrConflicts[propId];
+  afterAttrChange(nodeId);
+}
 
 function toggleAddAttrForm(id){
   const wrap = $('addAttrForm_' + id);
@@ -1032,11 +1150,7 @@ function confirmAddAttr(id){
   const propId = $('attrComboInput_' + id).dataset.value;
   const value = $('attrValueInput_' + id).value.trim();
   if(!propId || !value){ alert('Choisis une propriété dans la liste et entre une valeur.'); return; }
-  nodes[id].attrs[propId] = value;
-  renderNode(id);
-  if(selectedNodeId === id) markSelected(id);
-  updateStatus();
-  refreshAll();
+  addAttrChecked(id, propId, value);
 }
 
 /* Combo widget (search dropdown) */
@@ -1248,12 +1362,71 @@ function duplicateFromContext(){ hideContextMenu(); if(contextNodeId) duplicateN
 function deleteFromContext(){ hideContextMenu(); if(contextNodeId) deleteNode(contextNodeId); }
 
 /* ═══════════════════ EDGES ═══════════════════ */
-function addEdge(fromId, toId, predicate){
+/* Contraintes locales de cardinalité, distinctes du fichier ontologique. CIDOC-CRM,
+   par choix de gouvernance du SIG, ne déclare pas de owl:FunctionalProperty dans son
+   RDFS officiel (pour ne pas mélanger RDFS et OWL). Cette liste permet de documenter
+   une contrainte de valeur unique côté projet, même quand l'ontologie chargée ne
+   l'encode pas formellement. */
+let manualFunctionalProperties = new Set();
+function addManualFunctionalProperty(){
+  const input = $('manualFunctionalInput');
+  const val = input.value.trim();
+  if(!val) return;
+  manualFunctionalProperties.add(val);
+  input.value = '';
+  renderManualFunctionalList();
+}
+function removeManualFunctionalProperty(propId){
+  manualFunctionalProperties.delete(propId);
+  renderManualFunctionalList();
+}
+function renderManualFunctionalList(){
+  const el = $('manualFunctionalList');
+  if(!el) return;
+  if(manualFunctionalProperties.size === 0){ el.innerHTML = '<span style="color:var(--muted);">Aucune.</span>'; return; }
+  el.innerHTML = Array.from(manualFunctionalProperties).map(p=>
+    `<span style="display:inline-flex;align-items:center;gap:3px;background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:2px 5px;margin:2px 3px 0 0;">${propLabel(p)}<button onclick="removeManualFunctionalProperty('${p}')" style="border:none;background:none;cursor:pointer;color:var(--muted);">✕</button></span>`
+  ).join('');
+}
+function isFunctionalProperty(propId){
+  if(manualFunctionalProperties.has(propId)) return true;
+  return !!(ontology && ontology.properties[propId] && ontology.properties[propId].functional);
+}
+function addEdge(fromId, toId, predicate, opts){
+  opts = opts || {};
+  // doublon strict : le même triplet existe déjà, on ne le duplique pas
+  const dup = edges.find(e=>e.from===fromId && e.to===toId && e.predicate===predicate);
+  if(dup){ return {status:'duplicate', id:dup.id}; }
+
+  // conflit bloquant : uniquement si la propriété est déclarée owl:FunctionalProperty
+  // dans l'ontologie chargée (une seule valeur autorisée). Sinon, le multi-valué est
+  // légitime (ex. P14 carried out by peut avoir plusieurs acteurs dans CIDOC-CRM) et
+  // n'est pas traité comme un conflit.
+  const siblings = edges.filter(e=>e.from===fromId && e.predicate===predicate && e.to!==toId);
+  if(siblings.length && isFunctionalProperty(predicate) && !opts.skipConflictCheck){
+    openConflictModal({
+      kind:'edge', fromId, predicate, newTarget: toId,
+      onReplace: ()=>{
+        siblings.forEach(s=>{ edges = edges.filter(e=>e.id!==s.id); });
+        insertEdgeRaw(fromId, toId, predicate, false);
+      },
+      onKeepBoth: ()=>{
+        siblings.forEach(s=>{ s.conflict = true; });
+        insertEdgeRaw(fromId, toId, predicate, true);
+      }
+    });
+    return {status:'pending'};
+  }
+  const id = insertEdgeRaw(fromId, toId, predicate, false);
+  return {status:'created', id};
+}
+function insertEdgeRaw(fromId, toId, predicate, conflict){
   const id = 'e' + (++edgeCounter);
-  edges.push({ id, from: fromId, to: toId, predicate });
+  edges.push({ id, from: fromId, to: toId, predicate, conflict: !!conflict });
   redrawEdges(); updateStatus();
   if(selectedNodeId) renderInspector(selectedNodeId);
   updateTurtleLive();
+  return id;
 }
 function deleteEdge(id){
   edges = edges.filter(e=>e.id !== id);
@@ -1281,13 +1454,13 @@ function redrawEdges(){
     const cpx = mx+perp.x, cpy = my+perp.y;
 
     const path = document.createElementNS('http://www.w3.org/2000/svg','path');
-    path.setAttribute('class','edge-path');
+    path.setAttribute('class','edge-path' + (edge.conflict ? ' edge-conflict' : ''));
     path.setAttribute('d', `M${src.x},${src.y} Q${cpx},${cpy} ${tgt.x},${tgt.y}`);
     path.setAttribute('marker-end','url(#arrow)');
     path.addEventListener('click', ()=>{ if(confirm(`Supprimer la relation "${propLabel(edge.predicate)}" ?`)) deleteEdge(edge.id); });
     svg.appendChild(path);
 
-    const label = propLabel(edge.predicate);
+    const label = (edge.conflict ? '⚠ ' : '') + propLabel(edge.predicate);
     const textW = Math.min(label.length*5.4, 190);
     const bg = document.createElementNS('http://www.w3.org/2000/svg','rect');
     bg.setAttribute('x', cpx-textW/2-3); bg.setAttribute('y', cpy-9);
@@ -1295,7 +1468,7 @@ function redrawEdges(){
     bg.setAttribute('rx','3'); bg.setAttribute('class','edge-label-bg'); bg.setAttribute('opacity','0.9');
     svg.appendChild(bg);
     const txt = document.createElementNS('http://www.w3.org/2000/svg','text');
-    txt.setAttribute('x', cpx); txt.setAttribute('y', cpy+2); txt.setAttribute('class','edge-label-text');
+    txt.setAttribute('x', cpx); txt.setAttribute('y', cpy+2); txt.setAttribute('class','edge-label-text' + (edge.conflict ? ' edge-conflict-text' : ''));
     txt.textContent = label.length>32 ? label.slice(0,30)+'…' : label;
     svg.appendChild(txt);
   });
@@ -1323,7 +1496,7 @@ function renderInspector(id){
     const other = e.from===id ? e.to : e.from;
     const dir = e.from===id ? '→' : '←';
     const oet = getEntityType(nodes[other]?.classId);
-    return `<div class="conn-item">
+    return `<div class="conn-item${e.conflict ? ' conn-conflict' : ''}">
       <div class="conn-dot" style="background:${oet.color}"></div>
       <div style="flex:1;min-width:0;">
         <div style="font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${dir} ${nodes[other]?nodes[other].name:'?'}</div>
@@ -1397,7 +1570,96 @@ function updateDropHint(){
 function updateStatus(){
   $('statusNodes').textContent = Object.keys(nodes).length + ' nœud(s)';
   $('statusEdges').textContent = edges.length + ' relation(s)';
+  updateConflictIndicator();
 }
+
+/* ═══════════════════ CONFLITS ═══════════════════ */
+let pendingConflict = null;
+
+function openConflictModal(cfg){
+  pendingConflict = cfg;
+  const body = $('conflictModalBody');
+  if(cfg.kind === 'edge'){
+    const fromName = nodes[cfg.fromId] ? nodes[cfg.fromId].name : '?';
+    const siblings = edges.filter(e=>e.from===cfg.fromId && e.predicate===cfg.predicate && e.to!==cfg.newTarget);
+    const existingLabel = siblings.map(s=>nodes[s.to] ? nodes[s.to].name : '?').join(', ');
+    const newLabel = nodes[cfg.newTarget] ? nodes[cfg.newTarget].name : '?';
+    const src = manualFunctionalProperties.has(cfg.predicate) ? 'déclarée à valeur unique dans tes contraintes locales' : "déclarée <code>owl:FunctionalProperty</code> dans l'ontologie chargée";
+    body.innerHTML = `<strong>${propLabel(cfg.predicate)}</strong> est ${src} : une seule valeur est autorisée.<br><br><strong>${fromName}</strong> a déjà cette relation vers <strong>${existingLabel}</strong>. Tu essaies d'ajouter la même relation vers <strong>${newLabel}</strong>.`;
+  } else {
+    const nodeName = nodes[cfg.nodeId] ? nodes[cfg.nodeId].name : '?';
+    const src = manualFunctionalProperties.has(cfg.propId) ? 'déclarée à valeur unique dans tes contraintes locales' : "déclarée <code>owl:FunctionalProperty</code> dans l'ontologie chargée";
+    body.innerHTML = `<strong>${propLabel(cfg.propId)}</strong> est ${src} : une seule valeur est autorisée.<br><br><strong>${nodeName}</strong> a déjà la valeur « ${cfg.oldValue} ». Nouvelle valeur proposée : « ${cfg.newValue} ».`;
+  }
+  $('conflictModalActions').innerHTML = `
+    <button class="btn" onclick="resolveConflict('cancel')">Annuler</button>
+    <button class="btn" onclick="resolveConflict('keepBoth')">Conserver les deux (marquer le conflit)</button>
+    <button class="btn btn-primary" onclick="resolveConflict('replace')">Remplacer</button>
+  `;
+  $('conflictModalOverlay').classList.remove('hidden');
+}
+function resolveConflict(action){
+  const cfg = pendingConflict;
+  $('conflictModalOverlay').classList.add('hidden');
+  pendingConflict = null;
+  if(!cfg) return;
+  if(action === 'replace' && cfg.onReplace) cfg.onReplace();
+  else if(action === 'keepBoth' && cfg.onKeepBoth) cfg.onKeepBoth();
+}
+function countConflicts(){
+  let n = edges.filter(e=>e.conflict).length;
+  Object.values(nodes).forEach(nd=>{
+    if(nd.attrConflicts) n += Object.values(nd.attrConflicts).reduce((a,arr)=>a+arr.length, 0);
+  });
+  return n;
+}
+function updateConflictIndicator(){
+  const el = $('statusConflicts');
+  if(!el) return;
+  const n = countConflicts();
+  if(n > 0){ el.style.display = 'inline'; el.textContent = '⚠ ' + n + ' conflit(s) — cliquer pour revoir'; }
+  else { el.style.display = 'none'; el.textContent = ''; }
+}
+function openConflictPanel(){
+  const body = $('conflictPanelBody');
+  const rows = [];
+  edges.filter(e=>e.conflict).forEach(e=>{
+    const siblings = edges.filter(s=>s.conflict && s.from===e.from && s.predicate===e.predicate && s.id!==e.id);
+    rows.push(`<div class="conn-item conn-conflict" style="margin-bottom:6px;">
+      <div style="flex:1;">
+        <div style="font-size:10.5px;">${nodes[e.from] ? nodes[e.from].name : '?'} → ${propLabel(e.predicate)} → ${nodes[e.to] ? nodes[e.to].name : '?'}</div>
+        <div class="conn-label">en conflit avec ${siblings.length} autre(s) valeur(s) pour la même propriété</div>
+      </div>
+      <button class="btn small" style="padding:3px 7px;" onclick="deleteEdge('${e.id}'); openConflictPanel();">Retirer</button>
+    </div>`);
+  });
+  Object.values(nodes).forEach(nd=>{
+    if(!nd.attrConflicts) return;
+    Object.entries(nd.attrConflicts).forEach(([propId, values])=>{
+      values.forEach((v, i)=>{
+        rows.push(`<div class="conn-item conn-conflict" style="margin-bottom:6px;">
+          <div style="flex:1;">
+            <div style="font-size:10.5px;">${nd.name} — ${propLabel(propId)}</div>
+            <div class="conn-label">valeur retenue : « ${nd.attrs[propId]} » — valeur en attente : « ${v} »</div>
+          </div>
+          <div style="display:flex;gap:4px;">
+            <button class="btn small" style="padding:3px 7px;" onclick="promoteAttrConflict('${nd.id}','${propId}',${i}); openConflictPanel();">Utiliser</button>
+            <button class="btn small" style="padding:3px 7px;" onclick="dismissAttrConflict('${nd.id}','${propId}',${i}); openConflictPanel();">Écarter</button>
+          </div>
+        </div>`);
+      });
+    });
+  });
+  body.innerHTML = rows.length ? rows.join('') : '<div style="font-size:10.5px;color:var(--muted);">Aucun conflit en attente.</div>';
+  $('conflictPanelOverlay').classList.remove('hidden');
+}
+function closeConflictPanel(){ $('conflictPanelOverlay').classList.add('hidden'); }
+
+function openSettingsModal(){
+  renderManualFunctionalList();
+  $('settingsModalOverlay').classList.remove('hidden');
+}
+function closeSettingsModal(){ $('settingsModalOverlay').classList.add('hidden'); }
 function clearCanvas(){
   if(!confirm('Effacer tous les nœuds et relations ?')) return;
   Object.keys(nodes).forEach(id=>{ const el = $('cn_' + id); if(el) el.remove(); });
@@ -1564,14 +1826,15 @@ function addTripleFromForm(){
       const newClassId = objId.slice(5);
       objId = createNodeAtDefaultPosition(newClassId);
     }
-    addEdge(subjId, objId, propId);
+    const result = addEdge(subjId, objId, propId);
+    if(result.status === 'duplicate'){
+      showTripleWarn('Ce triplet existe déjà, il n\'a pas été ajouté à nouveau.');
+      return;
+    }
   } else {
     const val = $('tripleObjectLiteral').value.trim();
     if(!val){ showTripleWarn('Entre une valeur.'); return; }
-    nodes[subjId].attrs[propId] = val;
-    renderNode(subjId);
-    if(selectedNodeId === subjId) markSelected(subjId);
-    refreshAll();
+    addAttrChecked(subjId, propId, val);
   }
   hideTripleWarn();
   $('tripleObjectLiteral').value = '';
@@ -1597,18 +1860,30 @@ function generateTurtle(){
   function reg(id){ if(id && id.includes(':')) usedPrefixes.add(id.split(':')[0]); }
 
   const body = [];
+  let hasConflicts = false;
   Object.values(nodes).forEach(n=>{
     reg(n.classId);
     const parts = [`a ${n.classId || '<no-class>'}`];
-    Object.entries(n.attrs).forEach(([propId, value])=>{ reg(propId); parts.push(`${propId} "${turtleEscape(value)}"`); });
+    Object.entries(n.attrs).forEach(([propId, value])=>{
+      reg(propId);
+      parts.push(`${propId} "${turtleEscape(value)}"`);
+      const alt = n.attrConflicts && n.attrConflicts[propId];
+      if(alt && alt.length){
+        hasConflicts = true;
+        alt.forEach(v=>parts.push(`${propId} "${turtleEscape(v)}" # ⚠ conflit non résolu`));
+      }
+    });
     edges.filter(e=>e.from===n.id).forEach(e=>{
       reg(e.predicate);
       const t = nodes[e.to];
-      parts.push(`${e.predicate} ${prefix}:${t ? t.name : '?'}`);
+      const note = e.conflict ? ' # ⚠ conflit non résolu' : '';
+      if(e.conflict) hasConflicts = true;
+      parts.push(`${e.predicate} ${prefix}:${t ? t.name : '?'}${note}`);
     });
     const subj = `${prefix}:${n.name} `;
     body.push(subj + parts.join(' ;\n' + ' '.repeat(subj.length)) + ' .');
   });
+  if(hasConflicts){ body.unshift('# ⚠ Ce graphe contient des triplets en conflit non résolu (voir annotations ci-dessous).', ''); }
 
   const lines = [];
   if(ontology){
@@ -1697,8 +1972,15 @@ function importTurtleInstances(){
     }
   }catch(err){ alert('Erreur de lecture du Turtle : ' + err.message); return; }
 
+  const prefix = $('instPrefix').value.trim() || 'inst';
   const subjToNodeId = {};
-  Object.values(nodes).forEach(n=>{ if(n.originCurie) subjToNodeId[n.originCurie] = n.id; });
+  Object.values(nodes).forEach(n=>{
+    // clé principale : le curie que generateTurtle produirait pour ce nœud aujourd'hui
+    subjToNodeId[prefix + ':' + n.name] = n.id;
+    // clé de secours : le curie d'origine, utile si le nœud vient d'un import
+    // fait sous un autre préfixe et n'a pas été renommé depuis
+    if(n.originCurie && !(n.originCurie in subjToNodeId)) subjToNodeId[n.originCurie] = n.id;
+  });
 
   function ensureNodeFor(curie){
     if(subjToNodeId[curie]) return subjToNodeId[curie];
@@ -1710,7 +1992,7 @@ function importTurtleInstances(){
     return id;
   }
 
-  let createdCount = 0, edgeCount = 0, attrCount = 0;
+  let createdCount = 0, edgeCount = 0, attrCount = 0, conflictCount = 0;
   // Pass 1: types
   triples.forEach(([s,p,o])=>{
     const isType = p === 'a' || localName(p).toLowerCase() === 'type';
@@ -1721,7 +2003,10 @@ function importTurtleInstances(){
       nodes[nid].classId = o;
     }
   });
-  // Pass 2: everything else
+  // Pass 2: everything else. Passe par la même règle de conflit bloquant que la
+  // saisie graphique (propriété fonctionnelle, ontologie ou contrainte locale),
+  // mais en mode batch : pas de modal par triplet, les conflits sont marqués et
+  // listés dans le panneau de revue une fois l'import terminé.
   triples.forEach(([s,p,o])=>{
     const isType = p === 'a' || localName(p).toLowerCase() === 'type';
     if(isType) return;
@@ -1736,7 +2021,12 @@ function importTurtleInstances(){
       const tid = ensureNodeFor(o);
       if(Object.keys(subjToNodeId).length > before2) createdCount++;
       const already = edges.some(e=>e.from===nid && e.to===tid && e.predicate===p);
-      if(!already){ edges.push({id:'e'+(++edgeCounter), from:nid, to:tid, predicate:p}); edgeCount++; }
+      if(already) return;
+      const siblings = edges.filter(e=>e.from===nid && e.predicate===p && e.to!==tid);
+      const blocking = siblings.length && isFunctionalProperty(p);
+      if(blocking){ siblings.forEach(s2=>{ s2.conflict = true; }); conflictCount++; }
+      edges.push({id:'e'+(++edgeCounter), from:nid, to:tid, predicate:p, conflict: blocking});
+      edgeCount++;
     }
   });
 
@@ -1746,11 +2036,13 @@ function importTurtleInstances(){
   const note = $('turtleSyncNote');
   if(note) note.style.display = 'none';
   refreshAll();
-  alert(`Import terminé : ${createdCount} nœud(s) créé(s) ou retrouvé(s), ${edgeCount} relation(s), ${attrCount} attribut(s).`);
+  const conflictMsg = conflictCount ? `\n⚠ ${conflictCount} conflit(s) de cardinalité détecté(s) (propriété à valeur unique avec plusieurs valeurs) — voir le panneau de revue des conflits.` : '';
+  alert(`Import terminé : ${createdCount} nœud(s) créé(s) ou retrouvé(s), ${edgeCount} relation(s), ${attrCount} attribut(s).${conflictMsg}`);
 }
 
 updateDropHint();
 updateStatus();
+renderManualFunctionalList();
 refreshAll();
 </script>
 </body>
